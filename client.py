@@ -5,73 +5,92 @@ from datetime import datetime
 from threading import Thread
 from tkinter import *
 
-HOST = '192.168.1.146'
+HOST = "192.168.1.146"
 PORT = 42069
 CONNECTED = False
 
 client_socket = None
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--username')
+parser.add_argument("--username")
 args = parser.parse_args()
 username = args.username
 
+# message to be sent
 message_queue = []
+# recevied messages to be displayed
 received_message_queue = []
 
+
 def get_date_now():
-   return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
 
 def connect_to_server():
     global client_socket, CONNECTED
     try:
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client_socket.connect((HOST, PORT))
-        print(f'Connected to -> [{HOST}:{PORT}]')
-        received_message_queue.append(f'Connected to -> [{HOST}:{PORT}]')
+        received_message_queue.append(f"Connected to -> [{HOST}:{PORT}]")
         CONNECTED = True
     except Exception as e:
-        print(f'[{HOST}:{PORT}] -> Connection refused')
+        received_message_queue.append(f"[SERVER] -> Connection refused")
     return CONNECTED
+
 
 def listen_for_messages(cs):
     global CONNECTED, received_message_queue
     while CONNECTED:
         try:
-            message = cs.recv(1024).decode('utf-8')
+            message = cs.recv(1024).decode("utf-8")
             message = json.loads(message)
-            print(f"[{message['time']}] {message['username']}: {message['message']}")
             received_message_queue.append(f"[{message['time']}] {message['username']}: {message['message']}")
         except:
-            print(f'[{HOST}:{PORT}] -> No response from server')
-            received_message_queue.append(f'[{HOST}:{PORT}] -> No response from server')
+            received_message_queue.append(f"[SERVER] -> No response")
             CONNECTED = False
 
-def main():
-   global CONNECTED, listen_thread, client_socket
-   while True:
-       if not message_queue:
-           continue
-       for message_raw in message_queue:
-           print(message_raw)
-           if message_raw == '/kill':
-               client_socket.close()
-               print(f'Disconnected from {HOST}:{PORT}')
-               received_message_queue.append(f'Disconnected from {HOST}:{PORT}')
-               CONNECTED = False
-           elif message_raw  == '/reconnect':
-               if connect_to_server():
-                   listen_thread = Thread(target=listen_for_messages, args=(client_socket,))
-                   listen_thread.daemon = True
-                   listen_thread.start()
-           else:
-              try:
-                  message = {'username': username, 'time': get_date_now(), 'message': message_raw}
-                  message = json.dumps(message)
-                  client_socket.send(message.encode())
-              except:
-                  print(f'[{HOST}:{PORT}] -> No response from server')
-           message_queue.pop(0)
+
+def loop():
+    global CONNECTED, listen_thread, client_socket
+    while True:
+        if not message_queue:
+            continue
+        for message_raw in message_queue:
+            if not message_raw:
+                message_queue.pop(0)
+                continue
+            if message_raw[0] == '/':
+                command = message_raw[1:]
+                parts = command.split(' ')
+                keyword = parts[0]
+                if keyword == "kill":
+                    if CONNECTED:
+                        client_socket.close()
+                        received_message_queue.append(f"Disconnected from {HOST}:{PORT}")
+                        CONNECTED = False
+                    else:
+                        received_message_queue.append(f"Already disconnected from server")
+                elif keyword == "reconnect":
+                    if connect_to_server():
+                        listen_thread = Thread(target=listen_for_messages, args=(client_socket,))
+                        listen_thread.daemon = True
+                        listen_thread.start()
+                else:
+                    received_message_queue.append(f"Unknown command '{keyword}'")
+            else:
+                print(message)
+                try:
+                    message = {
+                        "username": username,
+                        "time": get_date_now(),
+                        "message": message_raw,
+                    }
+                    message = json.dumps(message)
+                    client_socket.send(message.encode())
+                except:
+                    received_message_queue.append(f"[SERVER] -> No response")
+            message_queue.pop(0)
+
 
 connect_to_server()
 
@@ -79,23 +98,18 @@ listen_thread = Thread(target=listen_for_messages, args=(client_socket,))
 listen_thread.daemon = True
 listen_thread.start()
 
-main_thread = Thread(target=main)
-main_thread.daemon = True
-main_thread.start()
+loop_thread = Thread(target=loop)
+loop_thread.daemon = True
+loop_thread.start()
 
-root = Tk()
-
+#gui
 def rgb(r, g, b):
     color = (r, g, b)
     return "#%02x%02x%02x" % color
 
 def send_message(event):
     message = text_box_entry.get()
-    #chatroom_inner.config(state='normal')
-    #chatroom_inner.insert(END, message + '\n')
     message_queue.append(message)
-    #chatroom_inner.config(state='disabled')
-    #chatroom_inner.see(END)
     text_box_entry.delete(0, END)
 
 def receive_message_gui():
@@ -104,11 +118,13 @@ def receive_message_gui():
         for message in received_message_queue:
             chatroom_inner.config(state='normal')
             chatroom_inner.insert(END, message + '\n')
+            print(message)
             chatroom_inner.config(state='disabled')
             chatroom_inner.see(END)
             chatroom_inner.update()
             received_message_queue.pop(0)
 
+root = Tk()
 root.title('Spice')
 
 screen_width = root.winfo_screenwidth()
