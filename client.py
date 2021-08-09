@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from threading import Thread
 from tkinter import *
+from win32api import GetMonitorInfo, MonitorFromPoint
 
 HOST = "192.168.1.146"
 PORT = 42069
@@ -175,24 +176,42 @@ def exit_button_hover(event):
     event.widget['background'] = rgb()
 
 def minimise():
-    root.wm_state('iconic')
+    #window.wm_state('iconic')
+    #window.deiconify()
+    #window.update_idletasks()
+    #window.wm_withdraw()
+    window.state('withdrawn')
+    window.overrideredirect(False)
+    window.state('iconic')
 
 def maximise():
-    root.attributes('-fullscreen', True)
+    #window.attributes('-fullscreen', True)
+    window.update_idletasks()
+    window.overrideredirect(True)
+    window.state('normal')
 
 def close_window():
     root.quit()
     root.destroy()
 
-root = Tk()
-root.title('Spice')
+monitor_info = GetMonitorInfo(MonitorFromPoint((0,0)))
+monitor_area = monitor_info.get("Monitor")
+work_area = monitor_info.get("Work")
+tasbar_height = monitor_area[3] - work_area[3]
 
-screen_width = root.winfo_screenwidth()
-screen_height = root.winfo_screenheight()
-root.attributes('-fullscreen', True)
+window = Tk()
+window.title('Spice')
+window.attributes('-alpha', 0.0)
+window.iconify()
+window.update()
 
-screen_width = root.winfo_screenwidth()
-screen_height = root.winfo_screenheight()
+root = Toplevel(window)
+root.update()
+
+screen_width = window.winfo_screenwidth()
+screen_height = window.winfo_screenheight()
+root.geometry(f"{screen_width}x{screen_height - tasbar_height}+0+0")
+root.overrideredirect(1)
 
 #----------------Title Bar----------------#
 title_bar = Frame(root, bg=rgb(32, 34, 37))
@@ -229,7 +248,7 @@ exit_button.bind('<Leave>', on_leave)
 
 #----------------Received Message Area----------------#
 chatroom = Frame(root, bg=rgb(54, 57, 63))
-chatroom.place(x=0, y=25, width=screen_width - 240, height=screen_height - 25)
+chatroom.place(x=0, y=25, width=screen_width - 240, height=root.winfo_height() - 25)
 chatroom.update()
 
 chatroom_inner = Text(chatroom, bg=rgb(54, 57, 63), fg='white', state='disabled')
@@ -238,7 +257,7 @@ chatroom_inner.update()
 
 #----------------Members Panel----------------#
 members = Frame(root, bg=rgb(47, 49, 54))
-members.place(x=screen_width - 240, y=25, width=240, height=screen_height - 25)
+members.place(x=screen_width - 240, y=25, width=240, height=root.winfo_height() - 25)
 members.update()
 members_label = Label(members, text='Members Online', bg=rgb(47, 49, 54), fg='white', font=('Comic Sans', 14))
 members_label.place(x=10, y=10, width=members.winfo_width() - 20, height=25)
@@ -248,8 +267,6 @@ text_box_color = rgb(64, 68, 75)
 text_box_container = Frame(chatroom, bg=text_box_color)
 text_box_container.place(x=16, y=chatroom.winfo_height() - 68, width=chatroom.winfo_width() - 32, height=44)
 text_box_container.update()
-#text_box_label = Label(text_box_container, text='Message all', bg=text_box_color, fg=rgb(104, 115, 106), font=('Comic Sans', 12))
-#text_box_label.place(x=10, y=10)
 text_box_entry = Entry(text_box_container, bg=text_box_color, fg='white', insertbackground='white')
 text_box_entry.place(x=10, y=10, width=text_box_container.winfo_width() - 20, height=25)
 text_box_entry.bind('<Return>', send_message)
@@ -259,5 +276,5 @@ text_box_entry.focus_set()
 while True:
     process_inbound_messages()
     process_online_user_queue()
-    root.update_idletasks()
-    root.update()
+    window.update_idletasks()
+    window.update()
