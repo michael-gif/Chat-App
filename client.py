@@ -177,19 +177,18 @@ def exit_button_hover(event):
     event.widget['background'] = rgb()
 
 def minimise():
-    #window.wm_state('iconic')
-    #window.deiconify()
-    #window.update_idletasks()
-    #window.wm_withdraw()
-    window.state('withdrawn')
-    window.overrideredirect(False)
-    window.state('iconic')
+    root.withdraw()
 
 def maximise():
-    #window.attributes('-fullscreen', True)
-    window.update_idletasks()
-    window.overrideredirect(True)
-    window.state('normal')
+    '''window.deiconify()
+    window.overrideredirect(True)'''
+    pass
+
+def toggle(event):
+    if event.type == EventType.Map:
+        root.deiconify()
+    else:
+        root.withdraw()
 
 def close_window():
     window.quit()
@@ -206,6 +205,9 @@ window.title('Spice')
 window.attributes('-alpha', 0.0)
 window.iconify()
 window.update()
+
+window.bind("<Map>", toggle)
+window.bind("<Unmap>", toggle)
 
 root = Toplevel(window)
 root.update()
