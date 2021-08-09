@@ -1,6 +1,7 @@
 import socket
 import argparse
 import json
+import sys
 from datetime import datetime
 from threading import Thread
 from tkinter import *
@@ -58,7 +59,7 @@ def listen_for_messages(cs):
             if "connection" in message_json:
                 online_users_queue = message_json['connection']
             else:
-                inbound_message_queue.append(f"[{message['time']}] {message['username']}: {message['message']}")
+                inbound_message_queue.append(f"[{message_json['time']}] {message_json['username']}: {message_json['message']}")
         except Exception as e:
             print(e)
             inbound_message_queue.append(f"[SERVER] -> No response")
@@ -191,8 +192,9 @@ def maximise():
     window.state('normal')
 
 def close_window():
-    root.quit()
-    root.destroy()
+    window.quit()
+    window.destroy()
+    sys.exit()
 
 monitor_info = GetMonitorInfo(MonitorFromPoint((0,0)))
 monitor_area = monitor_info.get("Monitor")
@@ -212,6 +214,15 @@ screen_width = window.winfo_screenwidth()
 screen_height = window.winfo_screenheight()
 root.geometry(f"{screen_width}x{screen_height - tasbar_height}+0+0")
 root.overrideredirect(1)
+
+'''
+root = Tk()
+root.title('Spice')
+root.state('zoomed')
+root.update()
+screen_width = root.winfo_screenwidth()
+screen_height = root.winfo_screenheight()
+'''
 
 #----------------Title Bar----------------#
 title_bar = Frame(root, bg=rgb(32, 34, 37))
