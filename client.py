@@ -4,7 +4,6 @@ import json
 import sys
 from datetime import datetime
 from threading import Thread
-#from tkinter import *
 from gui import *
 
 HOST = "192.168.1.146"
