@@ -43,8 +43,8 @@ def process_new_connection(cs):
     """Saves client's username and broadcasts updated user list to all clients"""
     message_raw = cs.recv(1024).decode()
     message_json = json.loads(message_raw)
-    if "connection" in message_json:
-        username = message_json['connection']
+    if "new_connection" in message_json:
+        username = message_json['new_connection']
         users.append(username)
         users_dict = {'connection': users}
         users_json = json.dumps(users_dict)

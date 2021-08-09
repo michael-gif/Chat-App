@@ -41,7 +41,7 @@ def connect_to_server(username):
         if username == None:
             username = 'None'
         message = {
-            "connection": username
+            "new_connection": username
         }
         client_socket.send(json.dumps(message).encode())
     except Exception as e:
