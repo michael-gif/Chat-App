@@ -16,48 +16,61 @@ parser.add_argument("--username")
 args = parser.parse_args()
 username = args.username
 
+online_users = []
+online_users_queue = []
+
 # message to be sent
-message_queue = []
+outbound_message_queue = []
 # recevied messages to be displayed
-received_message_queue = []
+inbound_message_queue = []
 
 
 def get_date_now():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def connect_to_server():
+def connect_to_server(username):
     global client_socket, CONNECTED
     try:
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client_socket.connect((HOST, PORT))
-        received_message_queue.append(f"Connected to -> [{HOST}:{PORT}]")
+        inbound_message_queue.append(f"Connected to -> [{HOST}:{PORT}]")
         CONNECTED = True
+        if username == None:
+            username = 'None'
+        message = {
+            "connection": username
+        }
+        client_socket.send(json.dumps(message).encode())
     except Exception as e:
-        received_message_queue.append(f"[SERVER] -> Connection refused")
+        print(e)
+        inbound_message_queue.append(f"[SERVER] -> Connection refused")
     return CONNECTED
 
 
 def listen_for_messages(cs):
-    global CONNECTED, received_message_queue
+    global CONNECTED, inbound_message_queue, online_users, online_users_queue
     while CONNECTED:
         try:
-            message = cs.recv(1024).decode("utf-8")
-            message = json.loads(message)
-            received_message_queue.append(f"[{message['time']}] {message['username']}: {message['message']}")
-        except:
-            received_message_queue.append(f"[SERVER] -> No response")
+            message_raw = cs.recv(1024).decode("utf-8")
+            message_json = json.loads(message_raw)
+            if "connection" in message_json:
+                online_users_queue = message_json['connection']
+            else:
+                inbound_message_queue.append(f"[{message['time']}] {message['username']}: {message['message']}")
+        except Exception as e:
+            print(e)
+            inbound_message_queue.append(f"[SERVER] -> No response")
             CONNECTED = False
 
 
 def loop():
     global CONNECTED, listen_thread, client_socket
     while True:
-        if not message_queue:
+        if not outbound_message_queue:
             continue
-        for message_raw in message_queue:
+        for message_raw in outbound_message_queue:
             if not message_raw:
-                message_queue.pop(0)
                 continue
             if message_raw[0] == '/':
                 command = message_raw[1:]
@@ -66,33 +79,32 @@ def loop():
                 if keyword == "kill":
                     if CONNECTED:
                         client_socket.close()
-                        received_message_queue.append(f"Disconnected from {HOST}:{PORT}")
+                        inbound_message_queue.append(f"Disconnected from {HOST}:{PORT}")
                         CONNECTED = False
                     else:
-                        received_message_queue.append(f"Already disconnected from server")
+                        inbound_message_queue.append(f"Already disconnected from server")
                 elif keyword == "reconnect":
-                    if connect_to_server():
+                    if connect_to_server(username):
                         listen_thread = Thread(target=listen_for_messages, args=(client_socket,))
                         listen_thread.daemon = True
                         listen_thread.start()
                 else:
-                    received_message_queue.append(f"Unknown command '{keyword}'")
+                    inbound_message_queue.append(f"Unknown command '{keyword}'")
             else:
-                print(message)
                 try:
                     message = {
                         "username": username,
                         "time": get_date_now(),
                         "message": message_raw,
                     }
-                    message = json.dumps(message)
-                    client_socket.send(message.encode())
+                    message_json = json.dumps(message)
+                    client_socket.send(message_json.encode())
                 except:
-                    received_message_queue.append(f"[SERVER] -> No response")
-            message_queue.pop(0)
+                    inbound_message_queue.append(f"[SERVER] -> No response")
+        outbound_message_queue.clear()
 
 
-connect_to_server()
+connect_to_server(username)
 
 listen_thread = Thread(target=listen_for_messages, args=(client_socket,))
 listen_thread.daemon = True
@@ -112,29 +124,49 @@ def rgb(r, g, b):
 
 def send_message(event):
     message = text_box_entry.get()
-    message_queue.append(message)
+    outbound_message_queue.append(message)
     text_box_entry.delete(0, END)
 
-def receive_message_gui():
-    global received_message_queue
-    if received_message_queue:
-        for message in received_message_queue:
+def process_inbound_messages():
+    if inbound_message_queue:
+        for message in inbound_message_queue:
             chatroom_inner.config(state='normal')
             chatroom_inner.insert(END, message + '\n')
             print(message)
             chatroom_inner.config(state='disabled')
             chatroom_inner.see(END)
             chatroom_inner.update()
-            received_message_queue.pop(0)
+        inbound_message_queue.clear()
+
+def user_enter(event):
+    event.widget['background'] = rgb(52, 55, 60)
+
+def user_leave(event):
+    event.widget['background'] = rgb(47, 49, 54)
+
+def process_online_user_queue():
+    global online_users
+    if online_users_queue:
+        for user_label in online_users:
+            user_label.destroy()
+        online_users.clear()
+        for i in range(len(online_users_queue)):
+            name = online_users_queue[i]
+            if name == None:
+                name = 'None'
+            online_user = Label(members, text=name, bg=rgb(47, 49, 54), fg='white', font=('Consolas', 12))
+            online_user.place(x=10, y=(30 * i) + 50, width=members.winfo_width() - 20, height=30)
+            online_user.bind('<Enter>', user_enter)
+            online_user.bind('<Leave>', user_leave)
+            online_users.append(online_user)
+        online_users_queue.clear()
 
 def on_enter(event):
-    #event.widget['background'] = rgb(40, 43, 46)
     name = str(event.widget)
     name = name.split('.')[-1]
     event.widget['image'] = images_hover[name]
 
 def on_leave(event):
-    #event.widget['background'] = rgb(32, 34, 37)
     name = str(event.widget)
     name = name.split('.')[-1]
     event.widget['image'] = images_idle[name]
@@ -208,8 +240,8 @@ chatroom_inner.update()
 members = Frame(root, bg=rgb(47, 49, 54))
 members.place(x=screen_width - 240, y=25, width=240, height=screen_height - 25)
 members.update()
-members_label = Label(members, text='Members', bg=rgb(47, 49, 54), fg='white', font=('Comic Sans', 14))
-members_label.place(x=10, y=10, width=members.winfo_width() - 20)
+members_label = Label(members, text='Members Online', bg=rgb(47, 49, 54), fg='white', font=('Comic Sans', 14))
+members_label.place(x=10, y=10, width=members.winfo_width() - 20, height=25)
 
 #----------------User Input----------------#
 text_box_color = rgb(64, 68, 75)
@@ -225,7 +257,7 @@ text_box_entry.focus_set()
 
 #----------------mainloop----------------#
 while True:
-    receive_message_gui()
+    process_inbound_messages()
+    process_online_user_queue()
     root.update_idletasks()
     root.update()
-
