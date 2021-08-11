@@ -6,8 +6,8 @@ from datetime import datetime
 from threading import Thread
 from gui import *
 
-HOST = "192.168.1.146"
-PORT = 42069
+HOST = "127.0.0.1"
+PORT = 1738
 CONNECTED = False
 
 client_socket = None
@@ -58,7 +58,10 @@ def listen_for_messages(cs):
             if "connection" in message_json:
                 online_users_queue = message_json['connection']
             else:
-                inbound_message_queue.append(f"[{message_json['time']}] {message_json['username']}: {message_json['message']}")
+                if message_json['username'] == '[PROXY]':
+                    inbound_message_queue.append(f"[{message_json['time']}] {message_json['username']} -> {message_json['message']}")
+                else:
+                    inbound_message_queue.append(f"[{message_json['time']}] {message_json['username']}: {message_json['message']}")
         except Exception as e:
             print(e)
             inbound_message_queue.append(f"[SERVER] -> No response")

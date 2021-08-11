@@ -124,10 +124,10 @@ class SpiceGUI:
         self.text_box_entry.delete(0, END)
 
     def user_label_enter(self, event):
-        event.widget['background'] = self.self.rgb(52, 55, 60)
+        event.widget['background'] = self.rgb(52, 55, 60)
 
     def user_label_leave(self, event):
-        event.widget['background'] = self.self.rgb(47, 49, 54)
+        event.widget['background'] = self.rgb(47, 49, 54)
 
     def titlebar_button_enter(self, event):
         name = str(event.widget)
