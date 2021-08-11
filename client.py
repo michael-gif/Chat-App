@@ -32,20 +32,21 @@ def get_date_now():
 
 def connect_to_server(username):
     global client_socket, CONNECTED
-    try:
-        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client_socket.connect((HOST, PORT))
-        inbound_message_queue.append(f"Connected to -> [{HOST}:{PORT}]")
-        CONNECTED = True
-        if username == None:
-            username = 'None'
-        message = {
-            "new_connection": username
-        }
-        client_socket.send(json.dumps(message).encode())
-    except Exception as e:
-        print(e)
-        inbound_message_queue.append(f"[SERVER] -> Connection refused")
+    #try:
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect((HOST, PORT))
+    inbound_message_queue.append(f"Connected to -> [{HOST}:{PORT}]")
+    CONNECTED = True
+    if username == None:
+        username = 'None'
+    message = {
+        "type": "connection",
+        "sender": username
+    }
+    client_socket.send(json.dumps(message).encode())
+    #except Exception as e:
+    #    print(e)
+    #    inbound_message_queue.append(f"[SERVER] -> Connection refused")
     return CONNECTED
 
 
@@ -55,13 +56,14 @@ def listen_for_messages(cs):
         try:
             message_raw = cs.recv(1024).decode("utf-8")
             message_json = json.loads(message_raw)
-            if "connection" in message_json:
-                online_users_queue = message_json['connection']
+            if message_json['type'] == 'connection':
+                online_users_queue = message_json['message']
+            elif message_json['type'] == 'system':
+                inbound_message_queue.append(f"[{message_json['time']}] {message_json['sender']} -> {message_json['message']}")
+            elif message_json['type'] == 'generic':
+                inbound_message_queue.append(f"[{message_json['time']}] {message_json['sender']}: {message_json['message']}")
             else:
-                if message_json['username'] == '[PROXY]':
-                    inbound_message_queue.append(f"[{message_json['time']}] {message_json['username']} -> {message_json['message']}")
-                else:
-                    inbound_message_queue.append(f"[{message_json['time']}] {message_json['username']}: {message_json['message']}")
+                inbound_message_queue.append(f"[{message_json['time']}] [CLIENT] -> unable to read message")
         except Exception as e:
             print(e)
             inbound_message_queue.append(f"[SERVER] -> No response")
@@ -97,7 +99,8 @@ def loop():
             else:
                 try:
                     message = {
-                        "username": username,
+                        "type": "generic",
+                        "sender": username,
                         "time": get_date_now(),
                         "message": message_raw,
                     }

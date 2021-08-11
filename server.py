@@ -30,7 +30,10 @@ def receive_message(cs, ca, username):
             clients.remove(cs)
             users.remove(username)
             # broadcast updated user list to all clients
-            message = {'connection': users}
+            message = {
+                "type": "connection",
+                "message": users
+            }
             message_json = json.dumps(message)
             for client in clients:
                 client.send(message_json.encode())
@@ -43,10 +46,13 @@ def process_new_connection(cs):
     """Saves client's username and broadcasts updated user list to all clients"""
     message_raw = cs.recv(1024).decode()
     message_json = json.loads(message_raw)
-    if "new_connection" in message_json:
-        username = message_json['new_connection']
+    if message_json['type'] == 'connection':
+        username = message_json['sender']
         users.append(username)
-        users_dict = {'connection': users}
+        users_dict = {
+            "type": "connection",
+            "message": users
+        }
         users_json = json.dumps(users_dict)
         for client in clients:
             client.send(users_json.encode())

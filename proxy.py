@@ -39,9 +39,10 @@ def receive_forward_message(crs, ca, css):
         except:
             # Server disconnected
             message = {
-                "username": '[PROXY]',
+                "type": "system",
+                "sender": "[PROXY]",
                 "time": get_date_now(),
-                "message": 'No reponse from server'
+                "message": "No reponse from server"
             }
             crs.send(json.dumps(message).encode())
 
@@ -73,10 +74,11 @@ while True:
     except:
         # Couldn't connect to server
         message = {
-                "username": '[PROXY]',
-                "time": get_date_now(),
-                "message": 'Failed to connect to server'
-            }
+            "type": "system",
+            "sender": "[PROXY]",
+            "time": get_date_now(),
+            "message": "Failed to connect to server"
+        }
         client_receive_socket.send(json.dumps(message).encode())
         print(f"[{get_date_now()}] Failed to connect {client_address[0]}:{client_address[1]} to {SERVER_HOST}:{SERVER_PORT}")
 
