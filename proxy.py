@@ -1,5 +1,6 @@
 import socket
 import json
+import argparse
 from datetime import datetime
 from threading import Thread
 
@@ -11,12 +12,28 @@ PORT = 1738
 SERVER_HOST = '127.0.0.1'
 SERVER_PORT = 42069
 
+# command line arguments
+parser = argparse.ArgumentParser()
+parser.add_argument("-lhost", "--localhost", help='ip used by clients to connect to proxy')
+parser.add_argument("-lport", "--localport", help='port used by clients to connect to proxy', type=int)
+parser.add_argument("-rhost", "--remotehost", help='ip used by proxy to connect to server')
+parser.add_argument("-rport", "--remoteport", help='port used by proxy to connect to server', type=int)
+args = parser.parse_args()
+
+if args.lhost:
+   HOST = args.lhost
+if args.lport:
+   PORT = args.lport
+if args.rhost:
+   SERVER_HOST = args.rhost
+if args.rport:
+   SERVER_PORT = args.rpot
+
+# server socket
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server_socket.bind((HOST, PORT))
 server_socket.listen()
-
-proxy_connections = {}
 
 def get_date_now():
    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
