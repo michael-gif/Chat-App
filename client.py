@@ -13,9 +13,15 @@ CONNECTED = False
 client_socket = None
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--username")
+parser.add_argument("-u", "--username", help='username to connect to server with')
+parser.add_argument("-i", "--host", help='server ip')
+parser.add_argument("-p", "--port", help='server port')
 args = parser.parse_args()
 username = args.username
+if args.host:
+    HOST = args.host
+if args.port:
+    PORT = args.port
 
 online_users = []
 online_users_queue = []

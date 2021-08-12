@@ -14,10 +14,10 @@ SERVER_PORT = 42069
 
 # command line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument("-lhost", "--localhost", help='ip used by clients to connect to proxy')
-parser.add_argument("-lport", "--localport", help='port used by clients to connect to proxy', type=int)
-parser.add_argument("-rhost", "--remotehost", help='ip used by proxy to connect to server')
-parser.add_argument("-rport", "--remoteport", help='port used by proxy to connect to server', type=int)
+parser.add_argument("--lhost", help='ip used by clients to connect to proxy')
+parser.add_argument("--lport", help='port used by clients to connect to proxy', type=int)
+parser.add_argument("--rhost", help='ip used by proxy to connect to server')
+parser.add_argument("--rport", help='port used by proxy to connect to server', type=int)
 args = parser.parse_args()
 
 if args.lhost:
@@ -98,6 +98,7 @@ while True:
         }
         client_receive_socket.send(json.dumps(message).encode())
         print(f"[{get_date_now()}] Failed to connect {client_address[0]}:{client_address[1]} to {SERVER_HOST}:{SERVER_PORT}")
+        continue
 
     # make thread to forward client messages
     forward_thread = Thread(target=receive_forward_message, args=(client_receive_socket, client_address, client_send_socket))

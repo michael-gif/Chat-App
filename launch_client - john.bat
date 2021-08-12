@@ -1,3 +1,5 @@
 @echo off
-python client.py --username=john
+set username=john
+title CLIENT - %username%
+python client.py --username=%username%
 pause
