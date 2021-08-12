@@ -96,7 +96,6 @@ class SpiceGUI:
             for message in inbound_message_queue:
                 self.chatroom_inner.config(state='normal')
                 self.chatroom_inner.insert(END, message + '\n')
-                print(message)
                 self.chatroom_inner.config(state='disabled')
                 self.chatroom_inner.see(END)
                 self.chatroom_inner.update()
@@ -121,6 +120,7 @@ class SpiceGUI:
     def send_message(self, event):
         message = self.text_box_entry.get()
         self.outbound_message_queue.append(message)
+        print('gui ' + str(self.outbound_message_queue))
         self.text_box_entry.delete(0, END)
 
     def user_label_enter(self, event):

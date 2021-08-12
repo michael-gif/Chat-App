@@ -4,7 +4,7 @@ import json
 import sys
 from datetime import datetime
 from threading import Thread
-from gui import *
+from spice_gui import *
 
 HOST = "127.0.0.1"
 PORT = 1738
@@ -18,6 +18,7 @@ parser.add_argument("-i", "--host", help='server ip')
 parser.add_argument("-p", "--port", help='server port')
 args = parser.parse_args()
 username = args.username
+username = 'bob'
 if args.host:
     HOST = args.host
 if args.port:
@@ -38,21 +39,21 @@ def get_date_now():
 
 def connect_to_server(username):
     global client_socket, CONNECTED
-    #try:
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((HOST, PORT))
-    inbound_message_queue.append(f"Connected to -> [{HOST}:{PORT}]")
-    CONNECTED = True
-    if username == None:
-        username = 'None'
-    message = {
-        "type": "connection",
-        "sender": username
-    }
-    client_socket.send(json.dumps(message).encode())
-    #except Exception as e:
-    #    print(e)
-    #    inbound_message_queue.append(f"[{get_date_now()}] [SERVER] -> Connection refused")
+    try:
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect((HOST, PORT))
+        inbound_message_queue.append(f"Connected to -> [{HOST}:{PORT}]")
+        CONNECTED = True
+        if username == None:
+            username = 'None'
+        message = {
+            "type": "connection",
+            "sender": username
+        }
+        client_socket.send(json.dumps(message).encode())
+    except Exception as e:
+        print(e)
+        inbound_message_queue.append(f"[{get_date_now()}] [SERVER] -> Connection refused")
     return CONNECTED
 
 
@@ -62,6 +63,7 @@ def listen_for_messages(cs):
         try:
             message_raw = cs.recv(1024).decode("utf-8")
             message_json = json.loads(message_raw)
+            print(message_json)
             if message_json['type'] == 'connection':
                 online_users_queue = message_json['message']
             elif message_json['type'] == 'system':
@@ -114,7 +116,8 @@ def loop():
                     client_socket.send(message_json.encode())
                 except:
                     inbound_message_queue.append(f"[SYSTEM] -> No response from server")
-        outbound_message_queue.clear()
+            outbound_message_queue.pop(0)
+        #outbound_message_queue.clear()
 
 
 connect_to_server(username)

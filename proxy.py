@@ -49,7 +49,7 @@ def receive_forward_message(crs, ca, css):
             print(f'[{get_date_now()}] Lost connection with {ca[0]}:{ca[1]}')
             css.close()
             break
-
+        
         try:
             # forward any messages to the server using the associated socket
             css.send(forward)
@@ -64,11 +64,19 @@ def receive_forward_message(crs, ca, css):
             crs.send(json.dumps(message).encode())
 
 def receive_backward_message(crs, ca, css):
+    def send_to_crs(message):
+        try:
+            # forward any messages to the client using the associated socket
+            crs.send(message)
+        except:
+            # Client disconnected
+            print(f'[{get_date_now()}] a connection with {ca[0]}:{ca[1]}')
+            
     while True:
         try:
             backward = css.recv(1024)
             if not backward:
-               raise Exception('')
+                raise Exception('')
         except:
             # Server disconnected
             print(f'[{get_date_now()}] Disconnected {ca[0]}:{ca[1]} from {SERVER_HOST}:{SERVER_PORT}')
@@ -79,18 +87,15 @@ def receive_backward_message(crs, ca, css):
                 "message": "No response from server"
             }
             try:
-               crs.send(json.dumps(message).encode())
-            except:
-               # Client disconnected
-               print(f'[{get_date_now()}] Lost connection with {ca[0]}:{ca[1]}')
+                # forward any messages to the client using the associated socket
+                crs.send(json.dumps(message).encode())
+            except Exception as e:
+                # Client disconnected
+                print(e)
+                css.close()
             break
 
-        try:
-            # forward any messages to the client using the associated socket
-            crs.send(backward)
-        except:
-            # Client disconnected
-            print(f'[{get_date_now()}] Lost connection with {ca[0]}:{ca[1]}')
+        send_to_crs(backward)
 
 print(f"[{get_date_now()}] Proxy opened on {HOST}:{PORT}")
 
