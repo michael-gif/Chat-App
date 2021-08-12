@@ -41,7 +41,7 @@ def get_date_now():
 def receive_forward_message(crs, ca, css):
     while True:
         try:
-            forward = crs.recv(1024).decode()
+            forward = crs.recv(1024)
             if not forward:
                raise Exception('')
         except:
@@ -52,14 +52,14 @@ def receive_forward_message(crs, ca, css):
 
         try:
             # forward any messages to the server using the associated socket
-            css.send(forward.encode())
+            css.send(forward)
         except:
             # Server disconnected
             message = {
                 "type": "system",
                 "sender": "[PROXY]",
                 "time": get_date_now(),
-                "message": "No reponse from server"
+                "message": "No response from server"
             }
             crs.send(json.dumps(message).encode())
 
@@ -72,10 +72,25 @@ def receive_backward_message(crs, ca, css):
         except:
             # Server disconnected
             print(f'[{get_date_now()}] Disconnected {ca[0]}:{ca[1]} from {SERVER_HOST}:{SERVER_PORT}')
+            message = {
+                "type": "system",
+                "sender": "[PROXY]",
+                "time": get_date_now(),
+                "message": "No response from server"
+            }
+            try:
+               crs.send(json.dumps(message).encode())
+            except:
+               # Client disconnected
+               print(f'[{get_date_now()}] Lost connection with {ca[0]}:{ca[1]}')
             break
 
-        # forward any messages to the client using the associated socket
-        crs.send(backward)
+        try:
+            # forward any messages to the client using the associated socket
+            crs.send(backward)
+        except:
+            # Client disconnected
+            print(f'[{get_date_now()}] Lost connection with {ca[0]}:{ca[1]}')
 
 print(f"[{get_date_now()}] Proxy opened on {HOST}:{PORT}")
 

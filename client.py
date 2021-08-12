@@ -52,7 +52,7 @@ def connect_to_server(username):
     client_socket.send(json.dumps(message).encode())
     #except Exception as e:
     #    print(e)
-    #    inbound_message_queue.append(f"[SERVER] -> Connection refused")
+    #    inbound_message_queue.append(f"[{get_date_now()}] [SERVER] -> Connection refused")
     return CONNECTED
 
 
@@ -69,10 +69,10 @@ def listen_for_messages(cs):
             elif message_json['type'] == 'generic':
                 inbound_message_queue.append(f"[{message_json['time']}] {message_json['sender']}: {message_json['message']}")
             else:
-                inbound_message_queue.append(f"[{message_json['time']}] [CLIENT] -> unable to read message")
+                inbound_message_queue.append(f"[{message_json['time']}] [SYSTEM] -> unable to read message")
         except Exception as e:
             print(e)
-            inbound_message_queue.append(f"[SERVER] -> No response")
+            inbound_message_queue.append(f"[{get_date_now()}] [SYSTEM] -> No response from server")
             CONNECTED = False
 
 
@@ -113,7 +113,7 @@ def loop():
                     message_json = json.dumps(message)
                     client_socket.send(message_json.encode())
                 except:
-                    inbound_message_queue.append(f"[SERVER] -> No response")
+                    inbound_message_queue.append(f"[SYSTEM] -> No response from server")
         outbound_message_queue.clear()
 
 
