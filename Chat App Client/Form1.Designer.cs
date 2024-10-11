@@ -38,13 +38,13 @@
             serverNameLabel = new Label();
             textBox1 = new TextBox();
             messageHistoryGridView = new DataGridView();
-            UsernameColumn = new DataGridViewTextBoxColumn();
-            MessageColumn = new DataGridViewTextBoxColumn();
             onlineUsersListView = new ListView();
             columnHeader1 = new ColumnHeader();
             sendMessageButton = new Button();
             connectToServerButton = new Button();
             label1 = new Label();
+            UsernameColumn = new DataGridViewTextBoxColumn();
+            MessageColumn = new DataGridViewTextBoxColumn();
             ((System.ComponentModel.ISupportInitialize)messageHistoryGridView).BeginInit();
             SuspendLayout();
             // 
@@ -101,6 +101,7 @@
             messageHistoryGridView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             messageHistoryGridView.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
             messageHistoryGridView.BackgroundColor = SystemColors.Window;
+            messageHistoryGridView.CellBorderStyle = DataGridViewCellBorderStyle.SingleVertical;
             messageHistoryGridView.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             messageHistoryGridView.ColumnHeadersVisible = false;
             messageHistoryGridView.Columns.AddRange(new DataGridViewColumn[] { UsernameColumn, MessageColumn });
@@ -112,6 +113,7 @@
             dataGridViewCellStyle1.SelectionForeColor = SystemColors.HighlightText;
             dataGridViewCellStyle1.WrapMode = DataGridViewTriState.True;
             messageHistoryGridView.DefaultCellStyle = dataGridViewCellStyle1;
+            messageHistoryGridView.GridColor = SystemColors.ControlLight;
             messageHistoryGridView.Location = new Point(139, 27);
             messageHistoryGridView.Name = "messageHistoryGridView";
             messageHistoryGridView.ReadOnly = true;
@@ -125,22 +127,6 @@
             messageHistoryGridView.CellMouseEnter += messageHistoryGridView_CellMouseEnter;
             messageHistoryGridView.CellMouseLeave += messageHistoryGridView_CellMouseLeave;
             messageHistoryGridView.SelectionChanged += messageHistoryGridView_SelectionChanged;
-            // 
-            // UsernameColumn
-            // 
-            UsernameColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-            UsernameColumn.FillWeight = 20F;
-            UsernameColumn.HeaderText = "Username";
-            UsernameColumn.Name = "UsernameColumn";
-            UsernameColumn.ReadOnly = true;
-            // 
-            // MessageColumn
-            // 
-            MessageColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-            MessageColumn.FillWeight = 80F;
-            MessageColumn.HeaderText = "Message";
-            MessageColumn.Name = "MessageColumn";
-            MessageColumn.ReadOnly = true;
             // 
             // onlineUsersListView
             // 
@@ -190,6 +176,22 @@
             label1.TabIndex = 8;
             label1.Text = "Messages";
             // 
+            // UsernameColumn
+            // 
+            UsernameColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            UsernameColumn.FillWeight = 25F;
+            UsernameColumn.HeaderText = "Username";
+            UsernameColumn.Name = "UsernameColumn";
+            UsernameColumn.ReadOnly = true;
+            // 
+            // MessageColumn
+            // 
+            MessageColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            MessageColumn.FillWeight = 75F;
+            MessageColumn.HeaderText = "Message";
+            MessageColumn.Name = "MessageColumn";
+            MessageColumn.ReadOnly = true;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -218,12 +220,12 @@
         private Label serverNameLabel;
         private TextBox textBox1;
         private DataGridView messageHistoryGridView;
-        private DataGridViewTextBoxColumn UsernameColumn;
-        private DataGridViewTextBoxColumn MessageColumn;
         private ListView onlineUsersListView;
         private ColumnHeader columnHeader1;
         private Button sendMessageButton;
         private Button connectToServerButton;
         private Label label1;
+        private DataGridViewTextBoxColumn UsernameColumn;
+        private DataGridViewTextBoxColumn MessageColumn;
     }
 }
