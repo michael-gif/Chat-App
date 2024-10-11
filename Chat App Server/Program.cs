@@ -2,13 +2,14 @@
 using System.Net;
 using System.Text;
 using System.Collections.Concurrent;
-using System.Net.WebSockets;
+using System.Text.Json;
 
 namespace Chat_App_Server
 {
     internal class Program
     {
         static List<string> discriminators = new List<string>();
+        static Dictionary<string, string> clientUsernames = new Dictionary<string, string>();
 
         static async Task Main(string[] args)
         {
@@ -60,12 +61,22 @@ namespace Chat_App_Server
                 totalUsernameReceived += currentReceived;
             }
             string username = Encoding.UTF8.GetString(usernameBuffer);
-            Console.WriteLine($"{GetTimeStamp()} Identified username from {clientSignature}: {username} ({usernameLength} bytes)");
+            Console.WriteLine($"{GetTimeStamp()} Identified username from {clientSignature}: '{username}' ({usernameLength} bytes)");
 
             // Create a new discriminator and send it to the client
             string discriminator = CreateNewDiscriminator();
             SendMessageToClient(clientSocket, Encoding.UTF8.GetBytes("<|DSCRM|>" + discriminator));
-            Console.WriteLine($"{GetTimeStamp()} Sent new discriminator to {clientSignature}: {username}, {discriminator}");
+            Console.WriteLine($"{GetTimeStamp()} Sent new discriminator to {clientSignature}, Username:{username}, DSCRM:{discriminator}");
+            clientUsernames[clientSignature] = $"{username}#{discriminator}";
+
+            // Send online user list to new user
+            string jsonUserList = JsonSerializer.Serialize(clientUsernames.Values);
+            SendMessageToClient(clientSocket, Encoding.UTF8.GetBytes("<|USRLST|>" + jsonUserList));
+            Console.WriteLine($"{GetTimeStamp()} Sent user list to {clientSignature}, Username:{username}#{discriminator}");
+
+            // update all clients about new user
+            BroadcastMessageToAllClients(Encoding.UTF8.GetBytes($"<|NEWUSR|>{username}#{discriminator}"), clients, clientSocket);
+            Console.WriteLine($"{GetTimeStamp()} Updated all clients about {clientSignature}, Username:{username}#{discriminator}");
 
             // Listen for actual messages from the client
             while (true)
@@ -79,8 +90,7 @@ namespace Chat_App_Server
                     // Client disconnected
                     if (received == 0)
                     {
-                        clients.TryTake(out clientSocket); // Remove from client list
-                        Console.WriteLine($"{GetTimeStamp()} Client {clientSignature} disconnected.");
+                        OnClientDisconnect(clients, clientSocket, clientSignature);
                         return;
                     }
 
@@ -93,35 +103,56 @@ namespace Chat_App_Server
                         var currentReceived = await clientSocket.ReceiveAsync(new ArraySegment<byte>(messageBuffer, totalReceived, messageLength - totalReceived), SocketFlags.None);
                         totalReceived += currentReceived;
                     }
-                    Console.WriteLine($"{GetTimeStamp()} Received message from {clientSignature} ({messageLength} bytes). Sending to all client...");
-                    BroadcastMessageToAllClients(messageBuffer, clients, clientSignature);
+                    Console.WriteLine($"{GetTimeStamp()} Received message from {clientSignature}, Username:{clientUsernames[clientSignature]} ({messageLength} bytes). Sending to all client...");
+                    BroadcastMessageToAllClients(messageBuffer, clients, null);
+                    Console.WriteLine($"{GetTimeStamp()} Sent message from {clientSignature}, Username:{clientUsernames[clientSignature]} ({messageLength} bytes) to all clients");
                 }
                 catch (SocketException)
                 {
                     // Handle any socket errors (like disconnects)
-                    Console.WriteLine($"{GetTimeStamp()} Client {clientSignature} connection lost.");
-                    clients.TryTake(out clientSocket);
+                    OnClientDisconnect(clients, clientSocket, clientSignature);
                     break;
                 }
             }
         }
 
         /// <summary>
-        /// Take the message and broadcast it to all the clients
+        /// Update all connected clients about the disconnection, then cleanup dead client data
         /// </summary>
-        /// <param name="messageBuffer"></param>
         /// <param name="clients"></param>
-        static void BroadcastMessageToAllClients(byte[] messageBuffer, ConcurrentBag<Socket> clients, string senderSignature)
+        /// <param name="clientSocket"></param>
+        /// <param name="clientSignature"></param>
+        static void OnClientDisconnect(ConcurrentBag<Socket> clients, Socket clientSocket, string clientSignature)
         {
-            foreach (var client in clients)
-            {
-                SendMessageToClient(client, messageBuffer);
-            }
-            Console.WriteLine($"{GetTimeStamp()} Sent message from {senderSignature} to all clients");
+            // Update connected clients about disconnection
+            string clientUsername = clientUsernames[clientSignature];
+            Console.WriteLine($"{GetTimeStamp()} Client disconnected: {clientSignature}, Username:{clientUsername}");
+            BroadcastMessageToAllClients(Encoding.UTF8.GetBytes($"<|USRDC|>{clientUsername}"), clients, clientSocket);
+            Console.WriteLine($"{GetTimeStamp()} Updated all clients about disconnection by :{clientSignature}, Username:{clientUsername}");
+
+            // Cleanup dead client data
+            discriminators.Remove(clientUsername.Split("#")[1]);
+            clientUsernames.Remove(clientSignature);
+            clients.TryTake(out clientSocket); // Remove from client list
         }
 
         /// <summary>
-        /// Send message to individual client
+        /// Take the message and broadcast it to all the clients. If 'excludedSender' is not null, every client except 'excludedSender' will be sent the message.
+        /// </summary>
+        /// <param name="messageBuffer">The message</param>
+        /// <param name="clients"></param>
+        /// <param name="excludedSender">Socket to exclude from being sent a message</param>
+        static void BroadcastMessageToAllClients(byte[] messageBuffer, ConcurrentBag<Socket> clients, Socket excludedSender)
+        {
+            foreach (var client in clients)
+            {
+                if (excludedSender != null && client == excludedSender) continue;
+                SendMessageToClient(client, messageBuffer);
+            }
+        }
+
+        /// <summary>
+        /// Send message to individual client, prepending it with the length of the message
         /// </summary>
         /// <param name="client"></param>
         /// <param name="messageBuffer"></param>
@@ -129,7 +160,13 @@ namespace Chat_App_Server
         {
             try
             {
-                client.Send(messageBuffer);
+                var messageBufferLengthBytes = BitConverter.GetBytes(messageBuffer.Length);
+                // Prepend the message with the length bytes
+                byte[] finalMessage = new byte[messageBufferLengthBytes.Length + messageBuffer.Length];
+                Array.Copy(messageBufferLengthBytes, 0, finalMessage, 0, messageBufferLengthBytes.Length);
+                Array.Copy(messageBuffer, 0, finalMessage, messageBufferLengthBytes.Length, messageBuffer.Length);
+                // send the message
+                client.Send(finalMessage);
             }
             catch (SocketException)
             {
@@ -138,13 +175,17 @@ namespace Chat_App_Server
             }
         }
 
+        /// <summary>
+        /// Gets today's timestamp in the format: [yyyy/MM/dd HH:mm:ss]
+        /// </summary>
+        /// <returns></returns>
         static string GetTimeStamp()
         {
             return DateTime.Now.ToString("[yyyy/MM/dd HH:mm:ss]");
         }
 
         /// <summary>
-        /// Random unique 4 digit string
+        /// Generate a random unique 4 digit string in the format: ####
         /// </summary>
         /// <returns></returns>
         static string CreateNewDiscriminator()

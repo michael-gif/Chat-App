@@ -173,7 +173,7 @@ namespace Chat_App_Client
         /// <param name="username"></param>
         private void NewOnlineUser(string username)
         {
-            onlineUsersListView.Items.Add("john doe");
+            onlineUsersListView.Items.Add(username);
         }
 
         /// <summary>
@@ -242,23 +242,59 @@ namespace Chat_App_Client
                     // if cancellation requested, throw an exception
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    // Receive acknowledgement
-                    var buffer = new byte[1_024];
-                    var received = await client.ReceiveAsync(buffer, SocketFlags.None);
-                    var response = Encoding.UTF8.GetString(buffer, 0, received);
+                    // Read the 4-byte message length
+                    var lengthBuffer = new byte[4];
+                    var received = await client.ReceiveAsync(lengthBuffer, SocketFlags.None);
+
+                    // Obtain message length and read that many bytes
+                    int messageLength = BitConverter.ToInt32(lengthBuffer, 0);
+                    var messageBuffer = new byte[messageLength];
+                    var totalReceived = 0;
+                    while (totalReceived < messageLength)
+                    {
+                        var currentReceived = await client.ReceiveAsync(new ArraySegment<byte>(messageBuffer, totalReceived, messageLength - totalReceived), SocketFlags.None);
+                        totalReceived += currentReceived;
+                    }
+
+                    // Decode the message
+                    var response = Encoding.UTF8.GetString(messageBuffer, 0, totalReceived);
                     if (response.StartsWith("<|DSCRM|>"))
                     {
                         string discriminator = response.Replace("<|DSCRM|>", "");
                         Console.WriteLine($"Discriminator recieved: {discriminator}");
                         username += "#" + discriminator;
-                        continue;
                     }
-                    ChatMessage deserializedJson = JsonSerializer.Deserialize<ChatMessage>(response);
-                    AddMessageToWindow(deserializedJson.Username, deserializedJson.Message);
+                    else if (response.StartsWith("<|NEWUSR|>"))
+                    {
+                        string newUsername = response.Replace("<|NEWUSR|>", "");
+                        Console.WriteLine($"New user online, username received: {newUsername}");
+                        NewOnlineUser(newUsername);
+                    }
+                    else if (response.StartsWith("<|USRDC|>"))
+                    {
+                        string disconnectedUsername = response.Replace("<|USRDC|>", "");
+                        Console.WriteLine($"User disconnected: {disconnectedUsername}");
+                        RemoveOnlineUser(disconnectedUsername);
+                    } else if (response.StartsWith("<|USRLST|>"))
+                    {
+                        string jsonList = response.Replace("<|USRLST|>", "");
+                        List<string> onlineUserList = JsonSerializer.Deserialize<List<string>>(jsonList);
+                        Console.WriteLine($"Online user list received, {onlineUserList.Count} users");
+                        foreach (string onlineUsername in onlineUserList)
+                        {
+                            NewOnlineUser(onlineUsername);
+                        }
+                    } else
+                    {
+                        ChatMessage deserializedJson = JsonSerializer.Deserialize<ChatMessage>(response);
+                        AddMessageToWindow(deserializedJson.Username, deserializedJson.Message);
+                    }
                 }
-            } catch
+            } catch (Exception e)
             {
-                Console.WriteLine("Disconnected from server");
+                Console.WriteLine("Exception: Disconnected from server");
+                Console.WriteLine(e.Message);
+                Console.WriteLine(e.StackTrace);
             }
         }
 
@@ -271,6 +307,7 @@ namespace Chat_App_Client
         {
             if (client == null) return;
             cancellationTokenSource.Cancel();
+            receiveMessageThread.Join();
             client.Shutdown(SocketShutdown.Both);
             client.Close();
         }
