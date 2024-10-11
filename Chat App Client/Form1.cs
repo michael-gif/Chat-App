@@ -136,6 +136,15 @@ namespace Chat_App_Client
         }
 
         /// <summary>
+        /// Gets today's timestamp in the format: [yyyy/MM/dd HH:mm:ss]
+        /// </summary>
+        /// <returns></returns>
+        private string GetTimeStamp()
+        {
+            return DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
+        }
+
+        /// <summary>
         /// Sends message to server
         /// </summary>
         /// <param name="message"></param>
@@ -145,7 +154,7 @@ namespace Chat_App_Client
 
             // Create message bytes
             if (string.IsNullOrEmpty(message)) return;
-            var chatMessage = new ChatMessage { Username = username + usernameDiscriminator, Message = message };
+            var chatMessage = new ChatMessage { Username = username + usernameDiscriminator, Message = message, Timestamp = GetTimeStamp() };
             string serializedJson = JsonSerializer.Serialize(chatMessage);
             byte[] messageBytes = Encoding.UTF8.GetBytes(serializedJson);
 
@@ -168,9 +177,9 @@ namespace Chat_App_Client
         /// </summary>
         /// <param name="username"></param>
         /// <param name="message"></param>
-        private void AddMessageToWindow(string username, string message)
+        private void AddMessageToWindow(string username, string message, string timestamp)
         {
-            messageHistoryGridView.Rows.Add(new string[] { username, message });
+            messageHistoryGridView.Rows.Add(new string[] { username + "\n" + timestamp, message });
             // Scroll history to the bottom
             messageHistoryGridView.FirstDisplayedScrollingRowIndex = messageHistoryGridView.RowCount - 1;
         }
@@ -332,7 +341,7 @@ namespace Chat_App_Client
                     else
                     {
                         ChatMessage deserializedJson = JsonSerializer.Deserialize<ChatMessage>(response);
-                        AddMessageToWindow(deserializedJson.Username, deserializedJson.Message);
+                        AddMessageToWindow(deserializedJson.Username, deserializedJson.Message, deserializedJson.Timestamp);
                     }
                 }
             }
@@ -380,6 +389,7 @@ namespace Chat_App_Client
         {
             public string Username { get; set; }
             public string Message { get; set; }
+            public string Timestamp { get; set; }
         }
     }
 }
