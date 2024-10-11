@@ -10,4 +10,8 @@
     <AssemblyName>client</AssemblyName>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Remove="Form1.cs~RF205c9a6.TMP" />
+  </ItemGroup>
+
 </Project>

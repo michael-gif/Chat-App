@@ -10,11 +10,13 @@ namespace Chat_App_Client
         bool firstTreeExpansion = false;
         Socket client;
         string username = "";
+        string usernameDiscriminator = "";
         Thread receiveMessageThread;
-        CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+        CancellationTokenSource cancellationTokenSource;
         public Form1(string username)
         {
             this.username = username;
+            cancellationTokenSource = new CancellationTokenSource();
             InitializeComponent();
             channelTreeView.ExpandAll();
         }
@@ -138,7 +140,7 @@ namespace Chat_App_Client
         {
             // Create message bytes
             if (string.IsNullOrEmpty(message)) return;
-            var chatMessage = new ChatMessage { Username = username, Message = message };
+            var chatMessage = new ChatMessage { Username = username + usernameDiscriminator, Message = message };
             string serializedJson = JsonSerializer.Serialize(chatMessage);
             byte[] messageBytes = Encoding.UTF8.GetBytes(serializedJson);
 
@@ -153,7 +155,6 @@ namespace Chat_App_Client
 
             // Send it
             await client.SendAsync(finalMessage, SocketFlags.None);
-            Console.WriteLine($"Socket client sent message: \"{serializedJson}\"");
             textBox1.Clear();
         }
 
@@ -221,13 +222,44 @@ namespace Chat_App_Client
         }
 
         /// <summary>
-        /// Connect to server
+        /// Close the socket and clean things up
+        /// </summary>
+        private void DisconnectFromServer()
+        {
+            connectToServerButton.Enabled = false;
+            cancellationTokenSource.Cancel();
+            receiveMessageThread.Join();
+            try
+            {
+                client.Shutdown(SocketShutdown.Both);
+                client.Close();
+            } catch
+            {
+                ; // fuck me. there is no good way to check if the socket is closed, so just let it error if closed twice
+            }
+            onlineUsersListView.Items.Clear();
+            messageHistoryGridView.Rows.Clear();
+            cancellationTokenSource = new CancellationTokenSource();
+            usernameDiscriminator = "";
+            connectToServerButton.Text = "Connect to server";
+            connectToServerButton.Enabled = true;
+        }
+
+        /// <summary>
+        /// Connect to server button
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
         private async void connectToServerButton_Click(object sender, EventArgs e)
         {
-            await InitSocket();
+            if (connectToServerButton.Text == "Connect to server")
+            {
+                await InitSocket();
+            }
+            else
+            {
+                DisconnectFromServer();
+            }
         }
 
         /// <summary>
@@ -262,7 +294,8 @@ namespace Chat_App_Client
                     {
                         string discriminator = response.Replace("<|DSCRM|>", "");
                         Console.WriteLine($"Discriminator recieved: {discriminator}");
-                        username += "#" + discriminator;
+                        usernameDiscriminator = "#" + discriminator;
+                        Text = "Chat App - Logged in as: " + username;
                     }
                     else if (response.StartsWith("<|NEWUSR|>"))
                     {
@@ -275,7 +308,8 @@ namespace Chat_App_Client
                         string disconnectedUsername = response.Replace("<|USRDC|>", "");
                         Console.WriteLine($"User disconnected: {disconnectedUsername}");
                         RemoveOnlineUser(disconnectedUsername);
-                    } else if (response.StartsWith("<|USRLST|>"))
+                    }
+                    else if (response.StartsWith("<|USRLST|>"))
                     {
                         string jsonList = response.Replace("<|USRLST|>", "");
                         List<string> onlineUserList = JsonSerializer.Deserialize<List<string>>(jsonList);
@@ -284,13 +318,15 @@ namespace Chat_App_Client
                         {
                             NewOnlineUser(onlineUsername);
                         }
-                    } else
+                    }
+                    else
                     {
                         ChatMessage deserializedJson = JsonSerializer.Deserialize<ChatMessage>(response);
                         AddMessageToWindow(deserializedJson.Username, deserializedJson.Message);
                     }
                 }
-            } catch (Exception e)
+            }
+            catch (Exception e)
             {
                 Console.WriteLine("Exception: Disconnected from server");
                 Console.WriteLine(e.Message);
@@ -299,17 +335,14 @@ namespace Chat_App_Client
         }
 
         /// <summary>
-        /// Disconnect from the server
+        /// Disconnect from the server on form close
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
             if (client == null) return;
-            cancellationTokenSource.Cancel();
-            receiveMessageThread.Join();
-            client.Shutdown(SocketShutdown.Both);
-            client.Close();
+            DisconnectFromServer();
         }
     }
 

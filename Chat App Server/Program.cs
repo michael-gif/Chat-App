@@ -128,7 +128,7 @@ namespace Chat_App_Server
             string clientUsername = clientUsernames[clientSignature];
             Console.WriteLine($"{GetTimeStamp()} Client disconnected: {clientSignature}, Username:{clientUsername}");
             BroadcastMessageToAllClients(Encoding.UTF8.GetBytes($"<|USRDC|>{clientUsername}"), clients, clientSocket);
-            Console.WriteLine($"{GetTimeStamp()} Updated all clients about disconnection by :{clientSignature}, Username:{clientUsername}");
+            Console.WriteLine($"{GetTimeStamp()} Updated all clients about disconnection by: {clientSignature}, Username:{clientUsername}");
 
             // Cleanup dead client data
             discriminators.Remove(clientUsername.Split("#")[1]);
