@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Windows.Forms;
 
 namespace Chat_App_Client
 {
@@ -20,6 +21,7 @@ namespace Chat_App_Client
             InitializeComponent();
             channelTreeView.ExpandAll();
             Text = "Chat App - Disconnected: " + username;
+            messageHistoryGridView.MouseWheel += new MouseEventHandler(messageHistoryGridView_MouseWheel);
         }
 
         /// <summary>
@@ -169,6 +171,8 @@ namespace Chat_App_Client
         private void AddMessageToWindow(string username, string message)
         {
             messageHistoryGridView.Rows.Add(new string[] { username, message });
+            // Scroll history to the bottom
+            messageHistoryGridView.FirstDisplayedScrollingRowIndex = messageHistoryGridView.RowCount - 1;
         }
 
         /// <summary>
@@ -350,6 +354,26 @@ namespace Chat_App_Client
         {
             if (client == null) return;
             DisconnectFromServer();
+        }
+
+        /// <summary>
+        /// Make the message history scrollable with the mouse wheel
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        void messageHistoryGridView_MouseWheel(object sender, MouseEventArgs e)
+        {
+            int currentIndex = messageHistoryGridView.FirstDisplayedScrollingRowIndex;
+            int scrollLines = SystemInformation.MouseWheelScrollLines;
+
+            if (e.Delta > 0)
+            {
+                messageHistoryGridView.FirstDisplayedScrollingRowIndex = Math.Max(0, currentIndex - scrollLines);
+            }
+            else if (e.Delta < 0)
+            {
+                messageHistoryGridView.FirstDisplayedScrollingRowIndex = currentIndex + scrollLines;
+            }
         }
 
         public class ChatMessage
