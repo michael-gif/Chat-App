@@ -1,6 +1,9 @@
-# Chat-App
-My first functioning chat app
+# Chat App
+Simple chat app
 
 # Usage
-- run `python server.py`
-- run `python client.py --username=<username>`
+- run `server.exe [PORT]`
+- run `client.exe [username]`
+
+# Screenshot
+![screenshot](https://github.com/michael-gif/Chat-App/blob/main/resources/screenshot.png)

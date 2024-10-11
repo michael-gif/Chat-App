@@ -8,7 +8,7 @@ namespace Chat_App_Client
     public partial class Form1 : Form
     {
         bool firstTreeExpansion = false;
-        Socket client;
+        Socket? client;
         string username = "";
         string usernameDiscriminator = "";
         Thread receiveMessageThread;
@@ -19,6 +19,7 @@ namespace Chat_App_Client
             cancellationTokenSource = new CancellationTokenSource();
             InitializeComponent();
             channelTreeView.ExpandAll();
+            Text = "Chat App - Disconnected: " + username;
         }
 
         /// <summary>
@@ -138,6 +139,8 @@ namespace Chat_App_Client
         /// <param name="message"></param>
         private async void SendMessage(string message)
         {
+            if (client == null) return;
+
             // Create message bytes
             if (string.IsNullOrEmpty(message)) return;
             var chatMessage = new ChatMessage { Username = username + usernameDiscriminator, Message = message };
@@ -233,7 +236,9 @@ namespace Chat_App_Client
             {
                 client.Shutdown(SocketShutdown.Both);
                 client.Close();
-            } catch
+                client = null;
+            }
+            catch
             {
                 ; // fuck me. there is no good way to check if the socket is closed, so just let it error if closed twice
             }
@@ -241,6 +246,7 @@ namespace Chat_App_Client
             messageHistoryGridView.Rows.Clear();
             cancellationTokenSource = new CancellationTokenSource();
             usernameDiscriminator = "";
+            Text = "Chat App - Disconnected: " + username;
             connectToServerButton.Text = "Connect to server";
             connectToServerButton.Enabled = true;
         }
@@ -295,7 +301,7 @@ namespace Chat_App_Client
                         string discriminator = response.Replace("<|DSCRM|>", "");
                         Console.WriteLine($"Discriminator recieved: {discriminator}");
                         usernameDiscriminator = "#" + discriminator;
-                        Text = "Chat App - Logged in as: " + username;
+                        Text = $"Chat App - Connected: {username}{usernameDiscriminator}";
                     }
                     else if (response.StartsWith("<|NEWUSR|>"))
                     {
@@ -331,6 +337,7 @@ namespace Chat_App_Client
                 Console.WriteLine("Exception: Disconnected from server");
                 Console.WriteLine(e.Message);
                 Console.WriteLine(e.StackTrace);
+                DisconnectFromServer();
             }
         }
 
@@ -344,11 +351,11 @@ namespace Chat_App_Client
             if (client == null) return;
             DisconnectFromServer();
         }
-    }
 
-    public class ChatMessage
-    {
-        public string Username { get; set; }
-        public string Message { get; set; }
+        public class ChatMessage
+        {
+            public string Username { get; set; }
+            public string Message { get; set; }
+        }
     }
 }

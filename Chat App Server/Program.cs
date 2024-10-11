@@ -13,9 +13,11 @@ namespace Chat_App_Server
 
         static async Task Main(string[] args)
         {
+            int port = 11000;
+            if (args.Length > 1) port = int.Parse(args[1]);
             IPHostEntry localhost = await Dns.GetHostEntryAsync("localhost");
             IPAddress localIpAddress = localhost.AddressList[0];
-            IPEndPoint ipEndPoint = new(localIpAddress, 11_000);
+            IPEndPoint ipEndPoint = new(localIpAddress, port);
             using Socket listener = new(ipEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             listener.Bind(ipEndPoint);
             listener.Listen(100);

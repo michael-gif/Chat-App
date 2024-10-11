@@ -44,6 +44,7 @@
             columnHeader1 = new ColumnHeader();
             sendMessageButton = new Button();
             connectToServerButton = new Button();
+            label1 = new Label();
             ((System.ComponentModel.ISupportInitialize)messageHistoryGridView).BeginInit();
             SuspendLayout();
             // 
@@ -96,6 +97,7 @@
             // 
             messageHistoryGridView.AllowUserToAddRows = false;
             messageHistoryGridView.AllowUserToDeleteRows = false;
+            messageHistoryGridView.AllowUserToResizeRows = false;
             messageHistoryGridView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             messageHistoryGridView.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
             messageHistoryGridView.BackgroundColor = SystemColors.Window;
@@ -114,7 +116,9 @@
             messageHistoryGridView.Name = "messageHistoryGridView";
             messageHistoryGridView.ReadOnly = true;
             messageHistoryGridView.RowHeadersVisible = false;
+            messageHistoryGridView.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
             messageHistoryGridView.RowTemplate.Height = 25;
+            messageHistoryGridView.ScrollBars = ScrollBars.None;
             messageHistoryGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             messageHistoryGridView.Size = new Size(485, 385);
             messageHistoryGridView.TabIndex = 4;
@@ -177,11 +181,21 @@
             connectToServerButton.UseVisualStyleBackColor = true;
             connectToServerButton.Click += connectToServerButton_Click;
             // 
+            // label1
+            // 
+            label1.AutoSize = true;
+            label1.Location = new Point(139, 9);
+            label1.Name = "label1";
+            label1.Size = new Size(58, 15);
+            label1.TabIndex = 8;
+            label1.Text = "Messages";
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(800, 450);
+            Controls.Add(label1);
             Controls.Add(connectToServerButton);
             Controls.Add(sendMessageButton);
             Controls.Add(onlineUsersListView);
@@ -190,7 +204,8 @@
             Controls.Add(serverNameLabel);
             Controls.Add(channelTreeView);
             Name = "Form1";
-            Text = "Chat App";
+            StartPosition = FormStartPosition.CenterScreen;
+            Text = "Chat App - Disconnected";
             FormClosing += Form1_FormClosing;
             ((System.ComponentModel.ISupportInitialize)messageHistoryGridView).EndInit();
             ResumeLayout(false);
@@ -209,5 +224,6 @@
         private ColumnHeader columnHeader1;
         private Button sendMessageButton;
         private Button connectToServerButton;
+        private Label label1;
     }
 }
