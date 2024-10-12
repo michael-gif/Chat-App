@@ -208,11 +208,11 @@ namespace Chat_App_Client
         /// Connect to server
         /// </summary>
         /// <returns></returns>
-        private async Task InitSocket()
+        private async Task InitSocket(string hostname, int port)
         {
-            IPHostEntry localhost = await Dns.GetHostEntryAsync("localhost");
-            IPAddress localIpAddress = localhost.AddressList[0];
-            IPEndPoint ipEndPoint = new(localIpAddress, 11_000);
+            IPHostEntry hostEntry = await Dns.GetHostEntryAsync(hostname);
+            IPAddress ipAddress = hostEntry.AddressList[0];
+            IPEndPoint ipEndPoint = new(ipAddress, port);
             client = new(ipEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
 
             Console.WriteLine($"Attempting to connect to [{ipEndPoint.Address}, {ipEndPoint.Port}]...");
@@ -273,7 +273,28 @@ namespace Chat_App_Client
         {
             if (connectToServerButton.Text == "Connect to server")
             {
-                await InitSocket();
+                ConnectToServerForm connectToServerForm;
+                bool cancelled = false;
+                while (true)
+                {
+                    connectToServerForm = new ConnectToServerForm();
+                    DialogResult result = connectToServerForm.ShowDialog();
+                    if (result == DialogResult.Cancel)
+                    {
+                        cancelled = true;
+                        break;
+                    }
+
+                    // user didn't provide an address
+                    if (string.IsNullOrEmpty(connectToServerForm.Address))
+                    {
+                        MessageBox.Show("You did not provide an address", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        continue;
+                    }
+                    break;
+                }
+                if (cancelled) return;
+                await InitSocket(connectToServerForm.Address, connectToServerForm.Port);
             }
             else
             {
