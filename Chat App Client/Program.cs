@@ -34,7 +34,7 @@ namespace Chat_App_Client
             Form inputBox = new Form();
             inputBox.FormBorderStyle = FormBorderStyle.FixedDialog;
             inputBox.ClientSize = size;
-            inputBox.Text = "Enter a username";
+            inputBox.Text = "Pick a username";
             inputBox.Location = new Point(-1, -1);
             inputBox.MaximizeBox = false;
             inputBox.StartPosition = FormStartPosition.CenterScreen;

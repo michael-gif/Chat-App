@@ -28,7 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
-            DataGridViewCellStyle dataGridViewCellStyle2 = new DataGridViewCellStyle();
+            DataGridViewCellStyle dataGridViewCellStyle1 = new DataGridViewCellStyle();
             serverNameLabel = new Label();
             textBox1 = new TextBox();
             messageHistoryGridView = new DataGridView();
@@ -62,7 +62,7 @@
             textBox1.PlaceholderText = "Enter message";
             textBox1.Size = new Size(404, 20);
             textBox1.TabIndex = 3;
-            textBox1.TextChanged += UpdateTextBoxSize;
+            textBox1.TextChanged += textBox1_TextChanged;
             textBox1.KeyDown += textBox1_KeyDown;
             // 
             // messageHistoryGridView
@@ -77,14 +77,14 @@
             messageHistoryGridView.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             messageHistoryGridView.ColumnHeadersVisible = false;
             messageHistoryGridView.Columns.AddRange(new DataGridViewColumn[] { UsernameColumn, MessageColumn });
-            dataGridViewCellStyle2.Alignment = DataGridViewContentAlignment.MiddleLeft;
-            dataGridViewCellStyle2.BackColor = SystemColors.Window;
-            dataGridViewCellStyle2.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
-            dataGridViewCellStyle2.ForeColor = SystemColors.ControlText;
-            dataGridViewCellStyle2.SelectionBackColor = SystemColors.Highlight;
-            dataGridViewCellStyle2.SelectionForeColor = SystemColors.HighlightText;
-            dataGridViewCellStyle2.WrapMode = DataGridViewTriState.True;
-            messageHistoryGridView.DefaultCellStyle = dataGridViewCellStyle2;
+            dataGridViewCellStyle1.Alignment = DataGridViewContentAlignment.MiddleLeft;
+            dataGridViewCellStyle1.BackColor = SystemColors.Window;
+            dataGridViewCellStyle1.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+            dataGridViewCellStyle1.ForeColor = SystemColors.ControlText;
+            dataGridViewCellStyle1.SelectionBackColor = SystemColors.Highlight;
+            dataGridViewCellStyle1.SelectionForeColor = SystemColors.HighlightText;
+            dataGridViewCellStyle1.WrapMode = DataGridViewTriState.True;
+            messageHistoryGridView.DefaultCellStyle = dataGridViewCellStyle1;
             messageHistoryGridView.GridColor = SystemColors.ControlLight;
             messageHistoryGridView.Location = new Point(139, 27);
             messageHistoryGridView.Name = "messageHistoryGridView";

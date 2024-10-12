@@ -49,7 +49,7 @@ namespace Chat_App_Client
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void UpdateTextBoxSize(object sender, EventArgs args)
+        private void textBox1_TextChanged(object sender, EventArgs e)
         {
             int lines = textBox1.Lines.Length;
             int diff = (lines * 16) + 4 - textBox1.Height;
@@ -58,9 +58,19 @@ namespace Chat_App_Client
                 textBox1.Location = new Point(textBox1.Left, textBox1.Bottom - Math.Clamp((lines * 16) + 4, 20, 84));
                 textBox1.Height = Math.Clamp((lines * 16) + 4, 20, 84);
 
-                // window height - listview location Y - gap at bottom of window - text box height - gap between listview and textbox
+                // Window height - listview location Y - gap at bottom of window - text box height - gap between listview and textbox
                 messageHistoryGridView.Height = Height - messageHistoryGridView.Location.Y - 51 - textBox1.Height - 6;
             }
+        }
+
+        /// <summary>
+        /// Sends message on button click
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void sendMessageButton_Click(object sender, EventArgs e)
+        {
+            SendChatMessage(textBox1.Text);
         }
 
         /// <summary>
@@ -94,13 +104,86 @@ namespace Chat_App_Client
         }
 
         /// <summary>
-        /// Sends message on button click
+        /// Connect to server button
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void sendMessageButton_Click(object sender, EventArgs e)
+        private async void connectToServerButton_Click(object sender, EventArgs e)
         {
-            SendChatMessage(textBox1.Text);
+            if (connectToServerButton.Text == "Connect to server")
+            {
+                ConnectToServerForm connectToServerForm;
+                bool cancelled = false;
+                while (true)
+                {
+                    connectToServerForm = new ConnectToServerForm();
+                    DialogResult result = connectToServerForm.ShowDialog();
+                    if (result == DialogResult.Cancel)
+                    {
+                        cancelled = true;
+                        break;
+                    }
+
+                    // User didn't provide an address
+                    if (string.IsNullOrEmpty(connectToServerForm.Address))
+                    {
+                        MessageBox.Show("You did not provide an address", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        continue;
+                    }
+                    break;
+                }
+                if (cancelled) return;
+                await ConnectToServer(connectToServerForm.Address, connectToServerForm.Port);
+            }
+            else
+            {
+                DisconnectFromServer();
+            }
+        }
+
+        /// <summary>
+        /// Make the message history scrollable with the mouse wheel
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        void messageHistoryGridView_MouseWheel(object sender, MouseEventArgs e)
+        {
+            int currentIndex = messageHistoryGridView.FirstDisplayedScrollingRowIndex;
+            int scrollLines = SystemInformation.MouseWheelScrollLines;
+
+            if (e.Delta > 0)
+            {
+                messageHistoryGridView.FirstDisplayedScrollingRowIndex = Math.Max(0, currentIndex - scrollLines);
+            }
+            else if (e.Delta < 0)
+            {
+                messageHistoryGridView.FirstDisplayedScrollingRowIndex = currentIndex + scrollLines;
+            }
+        }
+
+        /// <summary>
+        /// Switch channel to selectedChannel
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void channelsListView_ItemSelectionChanged(object sender, ListViewItemSelectionChangedEventArgs e)
+        {
+            if (!e.IsSelected) return;
+            selectedChannel = (int)e.Item.Tag;
+            messageHistoryGridView.Rows.Clear();
+            SendChannelChange();
+            Console.WriteLine("Switched to channel: " + selectedChannel);
+        }
+
+        /// <summary>
+        /// Disconnect from the server on form close
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (client == null) return;
+            DisconnectFromServer();
         }
 
         /// <summary>
@@ -120,19 +203,21 @@ namespace Chat_App_Client
         {
             if (client == null) return;
 
-            // Create message bytes
+            // Create message
             if (string.IsNullOrEmpty(message)) return;
-            var chatMessage = new ChatMessage {
+            var chatMessage = new ChatMessage
+            {
                 Username = username + usernameDiscriminator,
                 Message = message,
                 Timestamp = GetTimeStamp()
             };
-            // convert channel into 4 bytes
-            byte[] channelBytes = BitConverter.GetBytes(selectedChannel);
 
-            // serialize message into json, then convert into bytes
+            // Serialize message into json, then convert into bytes
             string serializedJson = JsonSerializer.Serialize(chatMessage);
             byte[] messageBytes = Encoding.UTF8.GetBytes(serializedJson);
+
+            // Convert channel into 4 bytes
+            byte[] channelBytes = BitConverter.GetBytes(selectedChannel);
 
             // Calculate the length of the message and convert it to 4 bytes (Int32)
             int messageLength = messageBytes.Length + channelBytes.Length;
@@ -144,7 +229,6 @@ namespace Chat_App_Client
             finalBytes.AddRange(channelBytes);
             finalBytes.AddRange(messageBytes);
 
-
             // Send it
             await client.SendAsync(finalBytes.ToArray(), SocketFlags.None);
             textBox1.Clear();
@@ -155,6 +239,7 @@ namespace Chat_App_Client
         /// </summary>
         private async void SendChannelChange()
         {
+            // Create message
             string message = "<|CHCHGE|>" + selectedChannel;
             byte[] messageBytes = Encoding.UTF8.GetBytes(message);
 
@@ -167,7 +252,7 @@ namespace Chat_App_Client
             finalBytes.AddRange(lengthBytes);
             finalBytes.AddRange(messageBytes);
 
-            // send it
+            // Send it
             await client.SendAsync(finalBytes.ToArray(), SocketFlags.None);
         }
 
@@ -187,7 +272,7 @@ namespace Chat_App_Client
         /// Adds username to listview of online users
         /// </summary>
         /// <param name="username"></param>
-        private void NewOnlineUser(string username)
+        private void AddOnlineUser(string username)
         {
             onlineUsersListView.Items.Add(username);
         }
@@ -229,7 +314,7 @@ namespace Chat_App_Client
         /// Connect to server
         /// </summary>
         /// <returns></returns>
-        private async Task InitSocket(string hostname, int port)
+        private async Task ConnectToServer(string hostname, int port)
         {
             IPHostEntry hostEntry = await Dns.GetHostEntryAsync(hostname);
             IPAddress ipAddress = hostEntry.AddressList[0];
@@ -242,7 +327,7 @@ namespace Chat_App_Client
             await client.ConnectAsync(ipEndPoint);
             Console.WriteLine($"Connected to [{ipEndPoint.Address}, {ipEndPoint.Port}]");
 
-            // send username to server
+            // Send username to server
             var usernameBytes = Encoding.UTF8.GetBytes(username);
             var usernameLengthBytes = BitConverter.GetBytes(usernameBytes.Length);
             // Prepend the message with the length bytes
@@ -287,44 +372,6 @@ namespace Chat_App_Client
         }
 
         /// <summary>
-        /// Connect to server button
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private async void connectToServerButton_Click(object sender, EventArgs e)
-        {
-            if (connectToServerButton.Text == "Connect to server")
-            {
-                ConnectToServerForm connectToServerForm;
-                bool cancelled = false;
-                while (true)
-                {
-                    connectToServerForm = new ConnectToServerForm();
-                    DialogResult result = connectToServerForm.ShowDialog();
-                    if (result == DialogResult.Cancel)
-                    {
-                        cancelled = true;
-                        break;
-                    }
-
-                    // user didn't provide an address
-                    if (string.IsNullOrEmpty(connectToServerForm.Address))
-                    {
-                        MessageBox.Show("You did not provide an address", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        continue;
-                    }
-                    break;
-                }
-                if (cancelled) return;
-                await InitSocket(connectToServerForm.Address, connectToServerForm.Port);
-            }
-            else
-            {
-                DisconnectFromServer();
-            }
-        }
-
-        /// <summary>
         /// Listen for message from the server. This runs on a separate thread
         /// </summary>
         private async void receiveMessageThreadFunction(CancellationToken cancellationToken)
@@ -333,7 +380,7 @@ namespace Chat_App_Client
             {
                 while (true)
                 {
-                    // if cancellation requested, throw an exception
+                    // If cancellation requested, throw an exception
                     cancellationToken.ThrowIfCancellationRequested();
 
                     // Read the 4-byte message length
@@ -352,7 +399,7 @@ namespace Chat_App_Client
 
                     // Decode the message
                     var response = Encoding.UTF8.GetString(messageBuffer, 0, totalReceived);
-                    if (response.StartsWith("<|CHLST|>"))
+                    if (response.StartsWith("<|CHLST|>")) // Channel list
                     {
                         string jsonList = response.Replace("<|CHLST|>", "");
                         Dictionary<int, string> channelList = JsonSerializer.Deserialize<Dictionary<int, string>>(jsonList);
@@ -360,33 +407,33 @@ namespace Chat_App_Client
                         foreach (string channelName in channelList.Values) AddChannel(channelName);
                         SelectChannel(0);
                     }
-                    else if (response.StartsWith("<|DSCRM|>"))
+                    else if (response.StartsWith("<|DSCRM|>")) // Discriminator
                     {
                         string discriminator = response.Replace("<|DSCRM|>", "");
                         Console.WriteLine($"Discriminator recieved: {discriminator}");
                         usernameDiscriminator = "#" + discriminator;
                         Text = $"Chat App - Connected: {username}{usernameDiscriminator}";
                     }
-                    else if (response.StartsWith("<|NEWUSR|>"))
+                    else if (response.StartsWith("<|NEWUSR|>")) // New user online
                     {
                         string newUsername = response.Replace("<|NEWUSR|>", "");
                         Console.WriteLine($"New user online, username received: {newUsername}");
-                        NewOnlineUser(newUsername);
+                        AddOnlineUser(newUsername);
                     }
-                    else if (response.StartsWith("<|USRDC|>"))
+                    else if (response.StartsWith("<|USRDC|>")) // User went offline
                     {
                         string disconnectedUsername = response.Replace("<|USRDC|>", "");
                         Console.WriteLine($"User disconnected: {disconnectedUsername}");
                         RemoveOnlineUser(disconnectedUsername);
                     }
-                    else if (response.StartsWith("<|USRLST|>"))
+                    else if (response.StartsWith("<|USRLST|>")) // Online user list
                     {
                         string jsonList = response.Replace("<|USRLST|>", "");
                         List<string> onlineUserList = JsonSerializer.Deserialize<List<string>>(jsonList);
                         Console.WriteLine($"Online user list received, {onlineUserList.Count} users");
-                        foreach (string onlineUsername in onlineUserList) NewOnlineUser(onlineUsername);
+                        foreach (string onlineUsername in onlineUserList) AddOnlineUser(onlineUsername);
                     }
-                    else
+                    else // Chat message
                     {
                         ChatMessage deserializedJson = JsonSerializer.Deserialize<ChatMessage>(response);
                         AddMessageToWindow(deserializedJson.Username, deserializedJson.Message, deserializedJson.Timestamp);
@@ -400,51 +447,6 @@ namespace Chat_App_Client
                 Console.WriteLine(e.StackTrace);
                 DisconnectFromServer();
             }
-        }
-
-        /// <summary>
-        /// Disconnect from the server on form close
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
-        {
-            if (client == null) return;
-            DisconnectFromServer();
-        }
-
-        /// <summary>
-        /// Make the message history scrollable with the mouse wheel
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        void messageHistoryGridView_MouseWheel(object sender, MouseEventArgs e)
-        {
-            int currentIndex = messageHistoryGridView.FirstDisplayedScrollingRowIndex;
-            int scrollLines = SystemInformation.MouseWheelScrollLines;
-
-            if (e.Delta > 0)
-            {
-                messageHistoryGridView.FirstDisplayedScrollingRowIndex = Math.Max(0, currentIndex - scrollLines);
-            }
-            else if (e.Delta < 0)
-            {
-                messageHistoryGridView.FirstDisplayedScrollingRowIndex = currentIndex + scrollLines;
-            }
-        }
-
-        /// <summary>
-        /// Switch channel to selectedChannel
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void channelsListView_ItemSelectionChanged(object sender, ListViewItemSelectionChangedEventArgs e)
-        {
-            if (!e.IsSelected) return;
-            selectedChannel = (int)e.Item.Tag;
-            messageHistoryGridView.Rows.Clear();
-            SendChannelChange();
-            Console.WriteLine("Switched to channel: " + selectedChannel);
         }
     }
 }

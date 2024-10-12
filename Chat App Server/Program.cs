@@ -89,7 +89,7 @@ namespace Chat_App_Server
             SendMessageToClient(clientSocket, Encoding.UTF8.GetBytes("<|USRLST|>" + jsonUserList));
             Console.WriteLine($"{GetTimeStamp()} Sent user list to {clientSignature}, Username:{username}#{discriminator}");
 
-            // update all clients about new user
+            // Update all clients about new user
             BroadcastMessageToAllClients(Encoding.UTF8.GetBytes($"<|NEWUSR|>{username}#{discriminator}"), -1, clients, clientSocket);
             Console.WriteLine($"{GetTimeStamp()} Updated all clients about {clientSignature}, Username:{username}#{discriminator}");
 
@@ -129,7 +129,7 @@ namespace Chat_App_Server
                         continue;
                     }
 
-                    // remove channel from message
+                    // Remove channel from message
                     int clientChannel = BitConverter.ToInt32(messageBuffer, 0);
                     var messageWithoutChannel = new byte[messageLength - 4];
                     Array.Copy(messageBuffer, 4, messageWithoutChannel, 0, messageLength - 4);
@@ -164,6 +164,7 @@ namespace Chat_App_Server
             // Cleanup dead client data
             discriminators.Remove(clientUsername.Split("#")[1]);
             clientUsernames.Remove(clientSignature);
+            clientChannels.Remove(clientSocket);
             clients.TryTake(out clientSocket); // Remove from client list
         }
 
@@ -200,7 +201,7 @@ namespace Chat_App_Server
                 byte[] finalMessage = new byte[messageBufferLengthBytes.Length + messageBuffer.Length];
                 Array.Copy(messageBufferLengthBytes, 0, finalMessage, 0, messageBufferLengthBytes.Length);
                 Array.Copy(messageBuffer, 0, finalMessage, messageBufferLengthBytes.Length, messageBuffer.Length);
-                // send the message
+                // Send the message
                 client.Send(finalMessage);
             }
             catch (SocketException)
@@ -228,7 +229,7 @@ namespace Chat_App_Server
             while (true)
             {
                 Random random = new Random();
-                int randomNumber = random.Next(1000, 10000); // Generates a number between 1000 and 9999
+                int randomNumber = random.Next(1000, 10000); // Random number between 1000 and 9999
                 string discriminator = randomNumber.ToString();
                 if (discriminators.Contains(discriminator)) continue;
                 return discriminator;
