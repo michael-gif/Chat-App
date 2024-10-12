@@ -4,6 +4,7 @@ using System.Text;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Data.SQLite;
 
 namespace Chat_App_Server
 {
@@ -12,6 +13,7 @@ namespace Chat_App_Server
         USERNAME,
         CHANNEL_CHANGE,
         CHANNEL_LIST,
+        CHANNEL_HISTORY,
         DISCRIMINATOR,
         USER_CONNECTED,
         USER_DISCONNECTED,
@@ -46,8 +48,18 @@ namespace Chat_App_Server
         }
     }
 
+    public class ChatMessage
+    {
+        public string Username { get; set; }
+        public string Message { get; set; }
+        public string Timestamp { get; set; }
+    }
+
     internal class Program
     {
+        private const string databaseFile = "message_history.db";
+        private const string connectionString = "Data Source=message_history.db;Version=3;";
+
         static List<string> discriminators = new List<string>();
         static Dictionary<string, string> clientUsernames = new Dictionary<string, string>();
         static Dictionary<int, string> channels = new Dictionary<int, string>
@@ -62,13 +74,16 @@ namespace Chat_App_Server
         {
             int port = 11000;
             if (args.Length > 0) port = int.Parse(args[0]);
+
+            InitializeDatabase();
+
+            // Create socket
             IPHostEntry localhost = await Dns.GetHostEntryAsync("localhost");
             IPAddress localIpAddress = localhost.AddressList[0];
             IPEndPoint ipEndPoint = new(localIpAddress, port);
             using Socket listener = new(ipEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             listener.Bind(ipEndPoint);
             listener.Listen(100);
-
             Console.WriteLine($"{GetTimeStamp()} Listening for connections on [{ipEndPoint.Address}, {ipEndPoint.Port}]...");
             var clients = new ConcurrentBag<Socket>(); // Thread-safe collection of clients
 
@@ -81,6 +96,111 @@ namespace Chat_App_Server
                 // Handle client communication in a separate task
                 _ = Task.Run(() => HandleClient(handler, clients));
             }
+        }
+
+        /// <summary>
+        /// If the database doesn't already exist, create it
+        /// </summary>
+        static void InitializeDatabase()
+        {
+            if (!File.Exists(databaseFile))
+            {
+                SQLiteConnection.CreateFile(databaseFile);
+
+                // Create the Messages table
+                using (var connection = new SQLiteConnection(connectionString))
+                {
+                    connection.Open();
+                    string createTableQuery = @"
+                    CREATE TABLE Messages (
+                        MessageId INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ChannelId TINYINT NOT NULL,
+                        Username TEXT NOT NULL,
+                        Message TEXT NOT NULL,
+                        Timestamp TEXT NOT NULL
+                    );";
+                    using (var command = new SQLiteCommand(createTableQuery, connection))
+                        command.ExecuteNonQuery();
+                }
+                Console.WriteLine($"{GetTimeStamp()} Database and Messages table created.");
+            }
+            else
+            {
+                Console.WriteLine($"{GetTimeStamp()} Found database {databaseFile}");
+            }
+        }
+
+        /// <summary>
+        /// Stores a chat message in the database
+        /// </summary>
+        /// <param name="channelId"></param>
+        /// <param name="chatMessage"></param>
+        static void StoreMessage(int channelId, ChatMessage chatMessage)
+        {
+            using (var connection = new SQLiteConnection(connectionString))
+            {
+                connection.Open();
+
+                string insertQuery = @"
+                INSERT INTO Messages (ChannelId, Username, Message, Timestamp)
+                VALUES (@ChannelId, @Username, @Message, @Timestamp);";
+
+                using (var command = new SQLiteCommand(insertQuery, connection))
+                {
+                    command.Parameters.AddWithValue("@ChannelId", channelId);
+                    command.Parameters.AddWithValue("@Username", chatMessage.Username);
+                    command.Parameters.AddWithValue("@Message", chatMessage.Message);
+                    command.Parameters.AddWithValue("@Timestamp", chatMessage.Timestamp);
+
+                    command.ExecuteNonQuery();
+                }
+            }
+
+            Console.WriteLine($"{GetTimeStamp()} Message from {chatMessage.Username} stored in channel {channelId}.");
+        }
+
+        /// <summary>
+        /// Gets the most recent 100 messages from the given channel
+        /// </summary>
+        /// <param name="channelId"></param>
+        /// <returns></returns>
+        static List<string> GetLast100Messages(int channelId)
+        {
+            var messages = new List<string>();
+            using (var connection = new SQLiteConnection(connectionString))
+            {
+                connection.Open();
+
+                string selectQuery = @"
+                SELECT Username, Message, Timestamp
+                FROM Messages
+                WHERE ChannelId = @ChannelId
+                ORDER BY Timestamp ASC
+                LIMIT 100;";
+
+                using (var command = new SQLiteCommand(selectQuery, connection))
+                {
+                    command.Parameters.AddWithValue("@ChannelId", channelId);
+
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            var chatMessage = new ChatMessage
+                            {
+                                Username = reader.GetString(0),  // Username
+                                Message = reader.GetString(1),   // Message
+                                Timestamp = reader.GetString(2)  // Timestamp
+                            };
+                            // Serialize message into json, then add it to the list
+                            messages.Add(JsonSerializer.Serialize(chatMessage));
+                        }
+                    }
+                }
+            }
+
+            Console.WriteLine($"{GetTimeStamp()} Retrieved {messages.Count} messages from channel {channelId}.");
+            return messages;
         }
 
         static async Task HandleClient(Socket clientSocket, ConcurrentBag<Socket> clients) {
@@ -121,14 +241,14 @@ namespace Chat_App_Server
             Console.WriteLine($"{GetTimeStamp()} Sent new discriminator to {clientSignature}, Username:{clientUsername}, DSCRM:{discriminator}");
             clientUsernames[clientSignature] = $"{clientUsername}#{discriminator}";
 
+            // Send online user list to new user
+            SendMessageToClient(clientSocket, new Packet(PacketType.USER_LIST, JsonSerializer.Serialize(clientUsernames.Values)));
+            Console.WriteLine($"{GetTimeStamp()} Sent user list to {clientSignature}, Username:{clientUsername}#{discriminator}");
+
             // Send channel list to new user
             SendMessageToClient(clientSocket, new Packet(PacketType.CHANNEL_LIST, JsonSerializer.Serialize(channels)));
             Console.WriteLine($"{GetTimeStamp()} Sent channel list to {clientSignature}, Username:{clientUsername}#{discriminator}");
             clientChannels[clientSocket] = 0;
-
-            // Send online user list to new user
-            SendMessageToClient(clientSocket, new Packet(PacketType.USER_LIST, JsonSerializer.Serialize(clientUsernames.Values)));
-            Console.WriteLine($"{GetTimeStamp()} Sent user list to {clientSignature}, Username:{clientUsername}#{discriminator}");
 
             // Update all clients about new user
             BroadcastMessageToAllClients(new Packet(PacketType.USER_CONNECTED, $"{clientUsername}#{discriminator}"), clients, clientSocket);
@@ -162,18 +282,26 @@ namespace Chat_App_Server
 
                     string serializedJson = Encoding.UTF8.GetString(messageBuffer, 0, totalReceived);
                     Packet receivedPacket = JsonSerializer.Deserialize<Packet>(serializedJson);
-                    if (receivedPacket.Type == PacketType.CHANNEL_CHANGE)
+                    switch (receivedPacket.Type)
                     {
-                        int newClientChannel = receivedPacket.Channel;
-                        int oldChannel = clientChannels[clientSocket];
-                        clientChannels[clientSocket] = newClientChannel;
-                        Console.WriteLine($"{GetTimeStamp()} Channel change: {clientSignature}, Username:{clientUsernames[clientSignature]} from {oldChannel} to {newClientChannel}");
-                        continue;
+                        case PacketType.CHANNEL_CHANGE:
+                            int newClientChannel = receivedPacket.Channel;
+                            int oldChannel = clientChannels[clientSocket];
+                            clientChannels[clientSocket] = newClientChannel;
+                            Console.WriteLine($"{GetTimeStamp()} Channel change: {clientSignature}, Username:{clientUsernames[clientSignature]} from {oldChannel} to {newClientChannel}");
+                            
+                            // Send channel history
+                            List<string> channelHistory = GetLast100Messages(newClientChannel);
+                            SendMessageToClient(clientSocket, new Packet(PacketType.CHANNEL_HISTORY, JsonSerializer.Serialize(channelHistory)));
+                            Console.WriteLine($"{GetTimeStamp()} Sent channel {newClientChannel} history to {clientSignature}, Username:{clientUsername}#{discriminator}");
+                            continue;
+                        case PacketType.CHAT_MESSAGE:
+                            Console.WriteLine($"{GetTimeStamp()} Received message from {clientSignature}, Username:{clientUsernames[clientSignature]} ({messageLength} bytes, Channel:{receivedPacket.Channel})");
+                            StoreMessage(receivedPacket.Channel, JsonSerializer.Deserialize<ChatMessage>(receivedPacket.Payload));
+                            BroadcastMessageToAllClients(receivedPacket, clients, null);
+                            Console.WriteLine($"{GetTimeStamp()} Sent message from {clientSignature}, Username:{clientUsernames[clientSignature]} ({messageLength} bytes, Channel:{receivedPacket.Channel}) to all clients");
+                            break;
                     }
-
-                    Console.WriteLine($"{GetTimeStamp()} Received message from {clientSignature}, Username:{clientUsernames[clientSignature]} ({messageLength} bytes, Channel:{receivedPacket.Channel})");
-                    BroadcastMessageToAllClients(receivedPacket, clients, null);
-                    Console.WriteLine($"{GetTimeStamp()} Sent message from {clientSignature}, Username:{clientUsernames[clientSignature]} ({messageLength} bytes, Channel:{receivedPacket.Channel}) to all clients");
                 }
                 catch (SocketException)
                 {

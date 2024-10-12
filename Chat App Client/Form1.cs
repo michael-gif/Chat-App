@@ -28,6 +28,7 @@ namespace Chat_App_Client
             USERNAME,
             CHANNEL_CHANGE,
             CHANNEL_LIST,
+            CHANNEL_HISTORY,
             DISCRIMINATOR,
             USER_CONNECTED,
             USER_DISCONNECTED,
@@ -438,6 +439,15 @@ namespace Chat_App_Client
                             foreach (string channelName in channelList.Values) AddChannel(channelName);
                             SelectChannel(0);
                             break;
+                        case PacketType.CHANNEL_HISTORY:
+                            List<string> messages = JsonSerializer.Deserialize<List<string>>(packet.Payload);
+                            Console.WriteLine($"Channel history recieved: {messages.Count} messages");
+                            foreach (string jsonMessage in messages)
+                            {
+                                ChatMessage chatMessage = JsonSerializer.Deserialize<ChatMessage>(jsonMessage);
+                                AddMessageToWindow(chatMessage.Username, chatMessage.Message, chatMessage.Timestamp);
+                            }
+                            break;
                         case PacketType.DISCRIMINATOR:
                             string discriminator = packet.Payload;
                             Console.WriteLine($"Discriminator recieved: {discriminator}");
@@ -464,7 +474,7 @@ namespace Chat_App_Client
                             AddMessageToWindow(deserializedJson.Username, deserializedJson.Message, deserializedJson.Timestamp);
                             break;
                         default:
-                            Console.WriteLine($"Recieved unknown packet type: {packet.Type.ToString()}");
+                            Console.WriteLine($"Recieved unknown packet type: {packet.Type}");
                             break;
                     }
                 }

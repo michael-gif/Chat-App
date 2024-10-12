@@ -13,19 +13,20 @@ REM Create the destination directories if they don't exist
 mkdir "%CLIENT_DST%"
 mkdir "%SERVER_DST%"
 
-REM Copy Client files
-copy "%CLIENT_SRC%\client.dll" "%CLIENT_DST%"
-copy "%CLIENT_SRC%\client.exe" "%CLIENT_DST%"
-copy "%CLIENT_SRC%\client.runtimeconfig.json" "%CLIENT_DST%"
+REM Copy files
+xcopy "%CLIENT_SRC%\*" "%CLIENT_DST%\" /E /I /Y
+xcopy "%SERVER_SRC%\*" "%SERVER_DST%\" /E /I /Y
 
-REM Copy Server files
-copy "%SERVER_SRC%\server.dll" "%SERVER_DST%"
-copy "%SERVER_SRC%\server.exe" "%SERVER_DST%"
-copy "%SERVER_SRC%\server.runtimeconfig.json" "%SERVER_DST%"
+REM Delete .pdb files
+del /q "%CLIENT_DST%\*.pdb"
+del /q "%SERVER_DST%\*.pdb"
+echo Delete .pdb files
 
 REM Zip Client and Server folders using WinRAR
+echo Zipping...
 cd Distribution
 "..\resources\WinRAR.exe" a -r ChatApp.zip "Client\*" "Server\*"
+echo Created zip file
 
 REM Cleanup
 if exist Client rmdir /s /q Client
