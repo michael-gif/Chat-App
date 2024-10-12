@@ -2,63 +2,31 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
-using System.Windows.Forms;
 
 namespace Chat_App_Client
 {
     public partial class Form1 : Form
     {
-        bool firstTreeExpansion = false;
         Socket? client;
-        string username = "";
+        readonly string username = "";
         string usernameDiscriminator = "";
         Thread receiveMessageThread;
         CancellationTokenSource cancellationTokenSource;
+        int selectedChannel = -1;
         public Form1(string username)
         {
             this.username = username;
             cancellationTokenSource = new CancellationTokenSource();
             InitializeComponent();
-            channelTreeView.ExpandAll();
             Text = "Chat App - Disconnected: " + username;
             messageHistoryGridView.MouseWheel += new MouseEventHandler(messageHistoryGridView_MouseWheel);
         }
 
-        /// <summary>
-        /// Prevent the root node Channels from being selected
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void channelTreeView_BeforeSelect(object sender, TreeViewCancelEventArgs e)
+        public class ChatMessage
         {
-            if (e.Node.Parent == null)
-            {
-                channelTreeView.SelectedNode = null;
-                e.Node.BackColor = Color.White;
-                e.Node.ForeColor = Color.Black;
-                e.Cancel = true;
-            }
-        }
-
-        /// <summary>
-        /// Prevent the channel treeview from being expanded
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void channelTreeView_BeforeExpand(object sender, TreeViewCancelEventArgs e)
-        {
-            if (firstTreeExpansion) e.Cancel = true;
-            else firstTreeExpansion = true;
-        }
-
-        /// <summary>
-        /// Prevent the channel treeview from being collapsed
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void channelTreeView_BeforeCollapse(object sender, TreeViewCancelEventArgs e)
-        {
-            e.Cancel = true;
+            public string Username { get; set; }
+            public string Message { get; set; }
+            public string Timestamp { get; set; }
         }
 
         /// <summary>
@@ -72,7 +40,7 @@ namespace Chat_App_Client
             {
                 if (e.Shift) return;
                 e.SuppressKeyPress = true;
-                SendMessage(textBox1.Text);
+                SendChatMessage(textBox1.Text);
             }
         }
 
@@ -132,7 +100,7 @@ namespace Chat_App_Client
         /// <param name="e"></param>
         private void sendMessageButton_Click(object sender, EventArgs e)
         {
-            SendMessage(textBox1.Text);
+            SendChatMessage(textBox1.Text);
         }
 
         /// <summary>
@@ -148,28 +116,59 @@ namespace Chat_App_Client
         /// Sends message to server
         /// </summary>
         /// <param name="message"></param>
-        private async void SendMessage(string message)
+        private async void SendChatMessage(string message)
         {
             if (client == null) return;
 
             // Create message bytes
             if (string.IsNullOrEmpty(message)) return;
-            var chatMessage = new ChatMessage { Username = username + usernameDiscriminator, Message = message, Timestamp = GetTimeStamp() };
+            var chatMessage = new ChatMessage {
+                Username = username + usernameDiscriminator,
+                Message = message,
+                Timestamp = GetTimeStamp()
+            };
+            // convert channel into 4 bytes
+            byte[] channelBytes = BitConverter.GetBytes(selectedChannel);
+
+            // serialize message into json, then convert into bytes
             string serializedJson = JsonSerializer.Serialize(chatMessage);
             byte[] messageBytes = Encoding.UTF8.GetBytes(serializedJson);
+
+            // Calculate the length of the message and convert it to 4 bytes (Int32)
+            int messageLength = messageBytes.Length + channelBytes.Length;
+            byte[] lengthBytes = BitConverter.GetBytes(messageLength);
+
+            // The final message consists of the length of the message, the channel and the message
+            List<byte> finalBytes = new();
+            finalBytes.AddRange(lengthBytes);
+            finalBytes.AddRange(channelBytes);
+            finalBytes.AddRange(messageBytes);
+
+
+            // Send it
+            await client.SendAsync(finalBytes.ToArray(), SocketFlags.None);
+            textBox1.Clear();
+        }
+
+        /// <summary>
+        /// Updates the server on the selected channel
+        /// </summary>
+        private async void SendChannelChange()
+        {
+            string message = "<|CHCHGE|>" + selectedChannel;
+            byte[] messageBytes = Encoding.UTF8.GetBytes(message);
 
             // Calculate the length of the message and convert it to 4 bytes (Int32)
             int messageLength = messageBytes.Length;
             byte[] lengthBytes = BitConverter.GetBytes(messageLength);
 
-            // Prepend the message with the length bytes
-            byte[] finalMessage = new byte[lengthBytes.Length + messageBytes.Length];
-            Array.Copy(lengthBytes, 0, finalMessage, 0, lengthBytes.Length);
-            Array.Copy(messageBytes, 0, finalMessage, lengthBytes.Length, messageBytes.Length);
+            // The final message consists of the length of the message, the channel and the message
+            List<byte> finalBytes = new();
+            finalBytes.AddRange(lengthBytes);
+            finalBytes.AddRange(messageBytes);
 
-            // Send it
-            await client.SendAsync(finalMessage, SocketFlags.None);
-            textBox1.Clear();
+            // send it
+            await client.SendAsync(finalBytes.ToArray(), SocketFlags.None);
         }
 
         /// <summary>
@@ -202,6 +201,28 @@ namespace Chat_App_Client
             foreach (ListViewItem user in onlineUsersListView.Items)
                 if (user.Text == username)
                     onlineUsersListView.Items.Remove(user);
+        }
+
+        /// <summary>
+        /// Adds a channel to the channels treeview
+        /// </summary>
+        /// <param name="channelName"></param>
+        private void AddChannel(string channelName)
+        {
+            ListViewItem channel = new ListViewItem(channelName);
+            channel.Tag = channelsListView.Items.Count;
+            channelsListView.Items.Add(channel);
+        }
+
+        /// <summary>
+        /// Selects a channel, highlighting it.
+        /// </summary>
+        /// <param name="channelIndex"></param>
+        private void SelectChannel(int channelIndex)
+        {
+            foreach (ListViewItem item in channelsListView.Items) item.Selected = false;
+            channelsListView.Items[channelIndex].Selected = true;
+            channelsListView.Select();
         }
 
         /// <summary>
@@ -257,6 +278,7 @@ namespace Chat_App_Client
             }
             onlineUsersListView.Items.Clear();
             messageHistoryGridView.Rows.Clear();
+            channelsListView.Items.Clear();
             cancellationTokenSource = new CancellationTokenSource();
             usernameDiscriminator = "";
             Text = "Chat App - Disconnected: " + username;
@@ -330,7 +352,15 @@ namespace Chat_App_Client
 
                     // Decode the message
                     var response = Encoding.UTF8.GetString(messageBuffer, 0, totalReceived);
-                    if (response.StartsWith("<|DSCRM|>"))
+                    if (response.StartsWith("<|CHLST|>"))
+                    {
+                        string jsonList = response.Replace("<|CHLST|>", "");
+                        Dictionary<int, string> channelList = JsonSerializer.Deserialize<Dictionary<int, string>>(jsonList);
+                        Console.WriteLine($"Channels received: {channelList.Count}");
+                        foreach (string channelName in channelList.Values) AddChannel(channelName);
+                        SelectChannel(0);
+                    }
+                    else if (response.StartsWith("<|DSCRM|>"))
                     {
                         string discriminator = response.Replace("<|DSCRM|>", "");
                         Console.WriteLine($"Discriminator recieved: {discriminator}");
@@ -354,10 +384,7 @@ namespace Chat_App_Client
                         string jsonList = response.Replace("<|USRLST|>", "");
                         List<string> onlineUserList = JsonSerializer.Deserialize<List<string>>(jsonList);
                         Console.WriteLine($"Online user list received, {onlineUserList.Count} users");
-                        foreach (string onlineUsername in onlineUserList)
-                        {
-                            NewOnlineUser(onlineUsername);
-                        }
+                        foreach (string onlineUsername in onlineUserList) NewOnlineUser(onlineUsername);
                     }
                     else
                     {
@@ -406,11 +433,18 @@ namespace Chat_App_Client
             }
         }
 
-        public class ChatMessage
+        /// <summary>
+        /// Switch channel to selectedChannel
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void channelsListView_ItemSelectionChanged(object sender, ListViewItemSelectionChangedEventArgs e)
         {
-            public string Username { get; set; }
-            public string Message { get; set; }
-            public string Timestamp { get; set; }
+            if (!e.IsSelected) return;
+            selectedChannel = (int)e.Item.Tag;
+            messageHistoryGridView.Rows.Clear();
+            SendChannelChange();
+            Console.WriteLine("Switched to channel: " + selectedChannel);
         }
     }
 }

@@ -28,49 +28,21 @@
         /// </summary>
         private void InitializeComponent()
         {
-            TreeNode treeNode1 = new TreeNode("Node1");
-            TreeNode treeNode2 = new TreeNode("Node2");
-            TreeNode treeNode3 = new TreeNode("Node3");
-            TreeNode treeNode4 = new TreeNode("Node4");
-            TreeNode treeNode5 = new TreeNode("Channels", new TreeNode[] { treeNode1, treeNode2, treeNode3, treeNode4 });
-            DataGridViewCellStyle dataGridViewCellStyle1 = new DataGridViewCellStyle();
-            channelTreeView = new TreeView();
+            DataGridViewCellStyle dataGridViewCellStyle2 = new DataGridViewCellStyle();
             serverNameLabel = new Label();
             textBox1 = new TextBox();
             messageHistoryGridView = new DataGridView();
+            UsernameColumn = new DataGridViewTextBoxColumn();
+            MessageColumn = new DataGridViewTextBoxColumn();
             onlineUsersListView = new ListView();
             columnHeader1 = new ColumnHeader();
             sendMessageButton = new Button();
             connectToServerButton = new Button();
             label1 = new Label();
-            UsernameColumn = new DataGridViewTextBoxColumn();
-            MessageColumn = new DataGridViewTextBoxColumn();
+            channelsListView = new ListView();
+            columnHeader2 = new ColumnHeader();
             ((System.ComponentModel.ISupportInitialize)messageHistoryGridView).BeginInit();
             SuspendLayout();
-            // 
-            // channelTreeView
-            // 
-            channelTreeView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
-            channelTreeView.Location = new Point(12, 27);
-            channelTreeView.Name = "channelTreeView";
-            treeNode1.Name = "Node1";
-            treeNode1.Text = "Node1";
-            treeNode2.Name = "Node2";
-            treeNode2.Text = "Node2";
-            treeNode3.Name = "Node3";
-            treeNode3.Text = "Node3";
-            treeNode4.Name = "Node4";
-            treeNode4.Text = "Node4";
-            treeNode5.Name = "Node0";
-            treeNode5.Text = "Channels";
-            channelTreeView.Nodes.AddRange(new TreeNode[] { treeNode5 });
-            channelTreeView.ShowPlusMinus = false;
-            channelTreeView.ShowRootLines = false;
-            channelTreeView.Size = new Size(121, 411);
-            channelTreeView.TabIndex = 0;
-            channelTreeView.BeforeCollapse += channelTreeView_BeforeCollapse;
-            channelTreeView.BeforeExpand += channelTreeView_BeforeExpand;
-            channelTreeView.BeforeSelect += channelTreeView_BeforeSelect;
             // 
             // serverNameLabel
             // 
@@ -105,14 +77,14 @@
             messageHistoryGridView.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             messageHistoryGridView.ColumnHeadersVisible = false;
             messageHistoryGridView.Columns.AddRange(new DataGridViewColumn[] { UsernameColumn, MessageColumn });
-            dataGridViewCellStyle1.Alignment = DataGridViewContentAlignment.MiddleLeft;
-            dataGridViewCellStyle1.BackColor = SystemColors.Window;
-            dataGridViewCellStyle1.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
-            dataGridViewCellStyle1.ForeColor = SystemColors.ControlText;
-            dataGridViewCellStyle1.SelectionBackColor = SystemColors.Highlight;
-            dataGridViewCellStyle1.SelectionForeColor = SystemColors.HighlightText;
-            dataGridViewCellStyle1.WrapMode = DataGridViewTriState.True;
-            messageHistoryGridView.DefaultCellStyle = dataGridViewCellStyle1;
+            dataGridViewCellStyle2.Alignment = DataGridViewContentAlignment.MiddleLeft;
+            dataGridViewCellStyle2.BackColor = SystemColors.Window;
+            dataGridViewCellStyle2.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+            dataGridViewCellStyle2.ForeColor = SystemColors.ControlText;
+            dataGridViewCellStyle2.SelectionBackColor = SystemColors.Highlight;
+            dataGridViewCellStyle2.SelectionForeColor = SystemColors.HighlightText;
+            dataGridViewCellStyle2.WrapMode = DataGridViewTriState.True;
+            messageHistoryGridView.DefaultCellStyle = dataGridViewCellStyle2;
             messageHistoryGridView.GridColor = SystemColors.ControlLight;
             messageHistoryGridView.Location = new Point(139, 27);
             messageHistoryGridView.Name = "messageHistoryGridView";
@@ -127,6 +99,22 @@
             messageHistoryGridView.CellMouseEnter += messageHistoryGridView_CellMouseEnter;
             messageHistoryGridView.CellMouseLeave += messageHistoryGridView_CellMouseLeave;
             messageHistoryGridView.SelectionChanged += messageHistoryGridView_SelectionChanged;
+            // 
+            // UsernameColumn
+            // 
+            UsernameColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            UsernameColumn.FillWeight = 25F;
+            UsernameColumn.HeaderText = "Username";
+            UsernameColumn.Name = "UsernameColumn";
+            UsernameColumn.ReadOnly = true;
+            // 
+            // MessageColumn
+            // 
+            MessageColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            MessageColumn.FillWeight = 75F;
+            MessageColumn.HeaderText = "Message";
+            MessageColumn.Name = "MessageColumn";
+            MessageColumn.ReadOnly = true;
             // 
             // onlineUsersListView
             // 
@@ -176,27 +164,31 @@
             label1.TabIndex = 8;
             label1.Text = "Messages";
             // 
-            // UsernameColumn
+            // channelsListView
             // 
-            UsernameColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-            UsernameColumn.FillWeight = 25F;
-            UsernameColumn.HeaderText = "Username";
-            UsernameColumn.Name = "UsernameColumn";
-            UsernameColumn.ReadOnly = true;
+            channelsListView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
+            channelsListView.Columns.AddRange(new ColumnHeader[] { columnHeader2 });
+            channelsListView.FullRowSelect = true;
+            channelsListView.Location = new Point(12, 27);
+            channelsListView.MultiSelect = false;
+            channelsListView.Name = "channelsListView";
+            channelsListView.Size = new Size(121, 411);
+            channelsListView.TabIndex = 9;
+            channelsListView.UseCompatibleStateImageBehavior = false;
+            channelsListView.View = View.Details;
+            channelsListView.ItemSelectionChanged += channelsListView_ItemSelectionChanged;
             // 
-            // MessageColumn
+            // columnHeader2
             // 
-            MessageColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-            MessageColumn.FillWeight = 75F;
-            MessageColumn.HeaderText = "Message";
-            MessageColumn.Name = "MessageColumn";
-            MessageColumn.ReadOnly = true;
+            columnHeader2.Text = "Channels";
+            columnHeader2.Width = 154;
             // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(800, 450);
+            Controls.Add(channelsListView);
             Controls.Add(label1);
             Controls.Add(connectToServerButton);
             Controls.Add(sendMessageButton);
@@ -204,7 +196,6 @@
             Controls.Add(messageHistoryGridView);
             Controls.Add(textBox1);
             Controls.Add(serverNameLabel);
-            Controls.Add(channelTreeView);
             Name = "Form1";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "Chat App - Disconnected";
@@ -215,8 +206,6 @@
         }
 
         #endregion
-
-        private TreeView channelTreeView;
         private Label serverNameLabel;
         private TextBox textBox1;
         private DataGridView messageHistoryGridView;
@@ -227,5 +216,7 @@
         private Label label1;
         private DataGridViewTextBoxColumn UsernameColumn;
         private DataGridViewTextBoxColumn MessageColumn;
+        private ListView channelsListView;
+        private ColumnHeader columnHeader2;
     }
 }

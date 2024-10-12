@@ -10,6 +10,13 @@ namespace Chat_App_Server
     {
         static List<string> discriminators = new List<string>();
         static Dictionary<string, string> clientUsernames = new Dictionary<string, string>();
+        static Dictionary<int, string> channels = new Dictionary<int, string>
+        {
+            { 0, "Channel 0" },
+            { 1, "Channel 1" },
+            { 2, "Channel 2" }
+        };
+        static Dictionary<Socket, int> clientChannels = new Dictionary<Socket, int>();
 
         static async Task Main(string[] args)
         {
@@ -71,13 +78,19 @@ namespace Chat_App_Server
             Console.WriteLine($"{GetTimeStamp()} Sent new discriminator to {clientSignature}, Username:{username}, DSCRM:{discriminator}");
             clientUsernames[clientSignature] = $"{username}#{discriminator}";
 
+            // Send channel list to new user
+            string jsonChannelList = JsonSerializer.Serialize(channels);
+            SendMessageToClient(clientSocket, Encoding.UTF8.GetBytes("<|CHLST|>" + jsonChannelList));
+            Console.WriteLine($"{GetTimeStamp()} Sent channel list to {clientSignature}, Username:{username}#{discriminator}");
+            clientChannels[clientSocket] = 0;
+
             // Send online user list to new user
             string jsonUserList = JsonSerializer.Serialize(clientUsernames.Values);
             SendMessageToClient(clientSocket, Encoding.UTF8.GetBytes("<|USRLST|>" + jsonUserList));
             Console.WriteLine($"{GetTimeStamp()} Sent user list to {clientSignature}, Username:{username}#{discriminator}");
 
             // update all clients about new user
-            BroadcastMessageToAllClients(Encoding.UTF8.GetBytes($"<|NEWUSR|>{username}#{discriminator}"), clients, clientSocket);
+            BroadcastMessageToAllClients(Encoding.UTF8.GetBytes($"<|NEWUSR|>{username}#{discriminator}"), -1, clients, clientSocket);
             Console.WriteLine($"{GetTimeStamp()} Updated all clients about {clientSignature}, Username:{username}#{discriminator}");
 
             // Listen for actual messages from the client
@@ -105,9 +118,25 @@ namespace Chat_App_Server
                         var currentReceived = await clientSocket.ReceiveAsync(new ArraySegment<byte>(messageBuffer, totalReceived, messageLength - totalReceived), SocketFlags.None);
                         totalReceived += currentReceived;
                     }
-                    Console.WriteLine($"{GetTimeStamp()} Received message from {clientSignature}, Username:{clientUsernames[clientSignature]} ({messageLength} bytes). Sending to all client...");
-                    BroadcastMessageToAllClients(messageBuffer, clients, null);
-                    Console.WriteLine($"{GetTimeStamp()} Sent message from {clientSignature}, Username:{clientUsernames[clientSignature]} ({messageLength} bytes) to all clients");
+
+                    var clientMessage = Encoding.UTF8.GetString(messageBuffer, 0, totalReceived);
+                    if (clientMessage.StartsWith("<|CHCHGE|>"))
+                    {
+                        int newClientChannel = int.Parse(clientMessage.Replace("<|CHCHGE|>", ""));
+                        int oldChannel = clientChannels[clientSocket];
+                        clientChannels[clientSocket] = newClientChannel;
+                        Console.WriteLine($"{GetTimeStamp()} Channel change: {clientSignature}, Username:{clientUsernames[clientSignature]} from {oldChannel} to {newClientChannel}");
+                        continue;
+                    }
+
+                    // remove channel from message
+                    int clientChannel = BitConverter.ToInt32(messageBuffer, 0);
+                    var messageWithoutChannel = new byte[messageLength - 4];
+                    Array.Copy(messageBuffer, 4, messageWithoutChannel, 0, messageLength - 4);
+
+                    Console.WriteLine($"{GetTimeStamp()} Received message from {clientSignature}, Username:{clientUsernames[clientSignature]} ({messageLength} bytes, Channel:{clientChannel})");
+                    BroadcastMessageToAllClients(messageWithoutChannel, clientChannel, clients, null);
+                    Console.WriteLine($"{GetTimeStamp()} Sent message from {clientSignature}, Username:{clientUsernames[clientSignature]} ({messageLength} bytes, Channel:{clientChannel}) to all clients");
                 }
                 catch (SocketException)
                 {
@@ -129,7 +158,7 @@ namespace Chat_App_Server
             // Update connected clients about disconnection
             string clientUsername = clientUsernames[clientSignature];
             Console.WriteLine($"{GetTimeStamp()} Client disconnected: {clientSignature}, Username:{clientUsername}");
-            BroadcastMessageToAllClients(Encoding.UTF8.GetBytes($"<|USRDC|>{clientUsername}"), clients, clientSocket);
+            BroadcastMessageToAllClients(Encoding.UTF8.GetBytes($"<|USRDC|>{clientUsername}"), -1, clients, clientSocket);
             Console.WriteLine($"{GetTimeStamp()} Updated all clients about disconnection by: {clientSignature}, Username:{clientUsername}");
 
             // Cleanup dead client data
@@ -144,11 +173,15 @@ namespace Chat_App_Server
         /// <param name="messageBuffer">The message</param>
         /// <param name="clients"></param>
         /// <param name="excludedSender">Socket to exclude from being sent a message</param>
-        static void BroadcastMessageToAllClients(byte[] messageBuffer, ConcurrentBag<Socket> clients, Socket excludedSender)
+        static void BroadcastMessageToAllClients(byte[] messageBuffer, int channel, ConcurrentBag<Socket> clients, Socket excludedSender)
         {
             foreach (var client in clients)
             {
+                // if sender is excluded
                 if (excludedSender != null && client == excludedSender) continue;
+                // if client is not on specified channel
+                if (channel != -1 && !(clientChannels[client] == channel)) continue;
+                // send message
                 SendMessageToClient(client, messageBuffer);
             }
         }
