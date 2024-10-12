@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Chat_App_Client
 {
@@ -20,6 +21,45 @@ namespace Chat_App_Client
             InitializeComponent();
             Text = "Chat App - Disconnected: " + username;
             messageHistoryGridView.MouseWheel += new MouseEventHandler(messageHistoryGridView_MouseWheel);
+        }
+
+        public enum PacketType
+        {
+            USERNAME,
+            CHANNEL_CHANGE,
+            CHANNEL_LIST,
+            DISCRIMINATOR,
+            USER_CONNECTED,
+            USER_DISCONNECTED,
+            USER_LIST,
+            CHAT_MESSAGE
+        }
+
+        public class Packet
+        {
+            public PacketType Type { get; set; }
+            public int Channel { get; set; } = -1;
+            public string Payload { get; set; }
+
+            [JsonConstructor]
+            public Packet(PacketType type, int channel, string payload)
+            {
+                Type = type;
+                Channel = channel;
+                Payload = payload;
+            }
+
+            public Packet(PacketType type, string payload)
+            {
+                Type = type;
+                Payload = payload;
+            }
+
+            public Packet(PacketType type, int channel)
+            {
+                Type = type;
+                Channel = channel;
+            }
         }
 
         public class ChatMessage
@@ -171,7 +211,7 @@ namespace Chat_App_Client
             if (!e.IsSelected) return;
             selectedChannel = (int)e.Item.Tag;
             messageHistoryGridView.Rows.Clear();
-            SendChannelChange();
+            SendPacketToServer(new Packet(PacketType.CHANNEL_CHANGE, selectedChannel));
             Console.WriteLine("Switched to channel: " + selectedChannel);
         }
 
@@ -212,45 +252,22 @@ namespace Chat_App_Client
                 Timestamp = GetTimeStamp()
             };
 
-            // Serialize message into json, then convert into bytes
-            string serializedJson = JsonSerializer.Serialize(chatMessage);
-            byte[] messageBytes = Encoding.UTF8.GetBytes(serializedJson);
-
-            // Convert channel into 4 bytes
-            byte[] channelBytes = BitConverter.GetBytes(selectedChannel);
-
-            // Calculate the length of the message and convert it to 4 bytes (Int32)
-            int messageLength = messageBytes.Length + channelBytes.Length;
-            byte[] lengthBytes = BitConverter.GetBytes(messageLength);
-
-            // The final message consists of the length of the message, the channel and the message
-            List<byte> finalBytes = new();
-            finalBytes.AddRange(lengthBytes);
-            finalBytes.AddRange(channelBytes);
-            finalBytes.AddRange(messageBytes);
-
-            // Send it
-            await client.SendAsync(finalBytes.ToArray(), SocketFlags.None);
+            SendPacketToServer(new Packet(PacketType.CHAT_MESSAGE, selectedChannel, JsonSerializer.Serialize(chatMessage)));
             textBox1.Clear();
         }
 
-        /// <summary>
-        /// Updates the server on the selected channel
-        /// </summary>
-        private async void SendChannelChange()
+        private async void SendPacketToServer(Packet packet)
         {
-            // Create message
-            string message = "<|CHCHGE|>" + selectedChannel;
-            byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+            // Create packet
+            string packetJson = JsonSerializer.Serialize(packet);
+            byte[] packetBytes = Encoding.UTF8.GetBytes(packetJson);
+            int packetLength = packetBytes.Length;
+            byte[] lengthBytes = BitConverter.GetBytes(packetLength);
 
-            // Calculate the length of the message and convert it to 4 bytes (Int32)
-            int messageLength = messageBytes.Length;
-            byte[] lengthBytes = BitConverter.GetBytes(messageLength);
-
-            // The final message consists of the length of the message, the channel and the message
+            // Prepend packet length to packet
             List<byte> finalBytes = new();
             finalBytes.AddRange(lengthBytes);
-            finalBytes.AddRange(messageBytes);
+            finalBytes.AddRange(packetBytes);
 
             // Send it
             await client.SendAsync(finalBytes.ToArray(), SocketFlags.None);
@@ -316,18 +333,23 @@ namespace Chat_App_Client
         /// <returns></returns>
         private async Task ConnectToServer(string hostname, int port)
         {
+            // Create new socket
             IPHostEntry hostEntry = await Dns.GetHostEntryAsync(hostname);
             IPAddress ipAddress = hostEntry.AddressList[0];
             IPEndPoint ipEndPoint = new(ipAddress, port);
             client = new(ipEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-
             Console.WriteLine($"Attempting to connect to [{ipEndPoint.Address}, {ipEndPoint.Port}]...");
+
+            // Disable connect button
             connectToServerButton.Enabled = false;
             connectToServerButton.Text = "Connecting...";
+
+            // Attempt to connect to the server
             try
             {
                 await client.ConnectAsync(ipEndPoint);
-            } catch (Exception ex)
+            }
+            catch (Exception ex)
             {
                 Console.WriteLine("Failed to connect to server");
                 Console.WriteLine(ex.ToString());
@@ -341,17 +363,13 @@ namespace Chat_App_Client
             Console.WriteLine($"Connected to [{ipEndPoint.Address}, {ipEndPoint.Port}]");
 
             // Send username to server
-            var usernameBytes = Encoding.UTF8.GetBytes(username);
-            var usernameLengthBytes = BitConverter.GetBytes(usernameBytes.Length);
-            // Prepend the message with the length bytes
-            byte[] finalMessage = new byte[usernameLengthBytes.Length + usernameBytes.Length];
-            Array.Copy(usernameLengthBytes, 0, finalMessage, 0, usernameLengthBytes.Length);
-            Array.Copy(usernameBytes, 0, finalMessage, usernameLengthBytes.Length, usernameBytes.Length);
-            await client.SendAsync(finalMessage, SocketFlags.None); // Send username
+            SendPacketToServer(new Packet(PacketType.USERNAME, username));
 
+            // Renable connect button
             connectToServerButton.Text = "Disconnect";
             connectToServerButton.Enabled = true;
 
+            // Start thread to receive messages
             receiveMessageThread = new(() => receiveMessageThreadFunction(cancellationTokenSource.Token));
             receiveMessageThread.Start();
         }
@@ -401,55 +419,53 @@ namespace Chat_App_Client
                     var received = await client.ReceiveAsync(lengthBuffer, SocketFlags.None);
 
                     // Obtain message length and read that many bytes
-                    int messageLength = BitConverter.ToInt32(lengthBuffer, 0);
-                    var messageBuffer = new byte[messageLength];
+                    int packetLength = BitConverter.ToInt32(lengthBuffer, 0);
+                    var packetBuffer = new byte[packetLength];
                     var totalReceived = 0;
-                    while (totalReceived < messageLength)
+                    while (totalReceived < packetLength)
                     {
-                        var currentReceived = await client.ReceiveAsync(new ArraySegment<byte>(messageBuffer, totalReceived, messageLength - totalReceived), SocketFlags.None);
+                        var currentReceived = await client.ReceiveAsync(new ArraySegment<byte>(packetBuffer, totalReceived, packetLength - totalReceived), SocketFlags.None);
                         totalReceived += currentReceived;
                     }
 
                     // Decode the message
-                    var response = Encoding.UTF8.GetString(messageBuffer, 0, totalReceived);
-                    if (response.StartsWith("<|CHLST|>")) // Channel list
-                    {
-                        string jsonList = response.Replace("<|CHLST|>", "");
-                        Dictionary<int, string> channelList = JsonSerializer.Deserialize<Dictionary<int, string>>(jsonList);
-                        Console.WriteLine($"Channels received: {channelList.Count}");
-                        foreach (string channelName in channelList.Values) AddChannel(channelName);
-                        SelectChannel(0);
-                    }
-                    else if (response.StartsWith("<|DSCRM|>")) // Discriminator
-                    {
-                        string discriminator = response.Replace("<|DSCRM|>", "");
-                        Console.WriteLine($"Discriminator recieved: {discriminator}");
-                        usernameDiscriminator = "#" + discriminator;
-                        Text = $"Chat App - Connected: {username}{usernameDiscriminator}";
-                    }
-                    else if (response.StartsWith("<|NEWUSR|>")) // New user online
-                    {
-                        string newUsername = response.Replace("<|NEWUSR|>", "");
-                        Console.WriteLine($"New user online, username received: {newUsername}");
-                        AddOnlineUser(newUsername);
-                    }
-                    else if (response.StartsWith("<|USRDC|>")) // User went offline
-                    {
-                        string disconnectedUsername = response.Replace("<|USRDC|>", "");
-                        Console.WriteLine($"User disconnected: {disconnectedUsername}");
-                        RemoveOnlineUser(disconnectedUsername);
-                    }
-                    else if (response.StartsWith("<|USRLST|>")) // Online user list
-                    {
-                        string jsonList = response.Replace("<|USRLST|>", "");
-                        List<string> onlineUserList = JsonSerializer.Deserialize<List<string>>(jsonList);
-                        Console.WriteLine($"Online user list received, {onlineUserList.Count} users");
-                        foreach (string onlineUsername in onlineUserList) AddOnlineUser(onlineUsername);
-                    }
-                    else // Chat message
-                    {
-                        ChatMessage deserializedJson = JsonSerializer.Deserialize<ChatMessage>(response);
-                        AddMessageToWindow(deserializedJson.Username, deserializedJson.Message, deserializedJson.Timestamp);
+                    var serializedPacket = Encoding.UTF8.GetString(packetBuffer, 0, totalReceived);
+                    Packet packet = JsonSerializer.Deserialize<Packet>(serializedPacket);
+                    switch (packet.Type) {
+                        case PacketType.CHANNEL_LIST: // Channel list
+                            Dictionary<int, string> channelList = JsonSerializer.Deserialize<Dictionary<int, string>>(packet.Payload);
+                            Console.WriteLine($"Channels received: {channelList.Count}");
+                            foreach (string channelName in channelList.Values) AddChannel(channelName);
+                            SelectChannel(0);
+                            break;
+                        case PacketType.DISCRIMINATOR:
+                            string discriminator = packet.Payload;
+                            Console.WriteLine($"Discriminator recieved: {discriminator}");
+                            usernameDiscriminator = "#" + discriminator;
+                            Text = $"Chat App - Connected: {username}{usernameDiscriminator}";
+                            break;
+                        case PacketType.USER_CONNECTED:
+                            string newUsername = packet.Payload;
+                            Console.WriteLine($"New user online, username received: {newUsername}");
+                            AddOnlineUser(newUsername);
+                            break;
+                        case PacketType.USER_DISCONNECTED:
+                            string disconnectedUsername = packet.Payload;
+                            Console.WriteLine($"User disconnected: {disconnectedUsername}");
+                            RemoveOnlineUser(disconnectedUsername);
+                            break;
+                        case PacketType.USER_LIST:
+                            List<string> onlineUserList = JsonSerializer.Deserialize<List<string>>(packet.Payload);
+                            Console.WriteLine($"Online user list received, {onlineUserList.Count} users");
+                            foreach (string onlineUsername in onlineUserList) AddOnlineUser(onlineUsername);
+                            break;
+                        case PacketType.CHAT_MESSAGE:
+                            ChatMessage deserializedJson = JsonSerializer.Deserialize<ChatMessage>(packet.Payload);
+                            AddMessageToWindow(deserializedJson.Username, deserializedJson.Message, deserializedJson.Timestamp);
+                            break;
+                        default:
+                            Console.WriteLine($"Recieved unknown packet type: {packet.Type.ToString()}");
+                            break;
                     }
                 }
             }

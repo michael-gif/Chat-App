@@ -3,9 +3,49 @@ using System.Net;
 using System.Text;
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Chat_App_Server
 {
+    public enum PacketType
+    {
+        USERNAME,
+        CHANNEL_CHANGE,
+        CHANNEL_LIST,
+        DISCRIMINATOR,
+        USER_CONNECTED,
+        USER_DISCONNECTED,
+        USER_LIST,
+        CHAT_MESSAGE
+    }
+
+    public class Packet
+    {
+        public PacketType Type { get; set; }
+        public int Channel { get; set; } = -1;
+        public string Payload { get; set; }
+
+        [JsonConstructor]
+        public Packet(PacketType type, int channel, string payload)
+        {
+            Type = type;
+            Channel = channel;
+            Payload = payload;
+        }
+
+        public Packet(PacketType type, string payload)
+        {
+            Type = type;
+            Payload = payload;
+        }
+
+        public Packet(PacketType type, int channel)
+        {
+            Type = type;
+            Channel = channel;
+        }
+    }
+
     internal class Program
     {
         static List<string> discriminators = new List<string>();
@@ -50,48 +90,49 @@ namespace Chat_App_Server
             Console.WriteLine($"{GetTimeStamp()} Established connection with {clientSignature}");
 
             // Read the length of the username first
-            var usernameLengthBuffer = new byte[4];
-            var usernameLengthReceived = await clientSocket.ReceiveAsync(usernameLengthBuffer, SocketFlags.None);
-            if (usernameLengthReceived == 0)
+            var packetLengthBuffer = new byte[4];
+            var packetLengthReceived = await clientSocket.ReceiveAsync(packetLengthBuffer, SocketFlags.None);
+            if (packetLengthReceived == 0)
             {
                 Console.WriteLine($"{GetTimeStamp()} Client {clientSignature} disconnected before sending username.");
                 return;
             }
 
             // Obtain username length
-            int usernameLength = BitConverter.ToInt32(usernameLengthBuffer, 0);
-            var usernameBuffer = new byte[usernameLength];
-            var totalUsernameReceived = 0;
+            int packetLength = BitConverter.ToInt32(packetLengthBuffer, 0);
+            var packetBuffer = new byte[packetLength];
+            var totalBytesReceived = 0;
 
             // Read the username
-            while (totalUsernameReceived < usernameLength)
+            while (totalBytesReceived < packetLength)
             {
-                var currentReceived = await clientSocket.ReceiveAsync(new ArraySegment<byte>(usernameBuffer, totalUsernameReceived, usernameLength - totalUsernameReceived), SocketFlags.None);
-                totalUsernameReceived += currentReceived;
+                var currentReceived = await clientSocket.ReceiveAsync(new ArraySegment<byte>(packetBuffer, totalBytesReceived, packetLength - totalBytesReceived), SocketFlags.None);
+                totalBytesReceived += currentReceived;
             }
-            string username = Encoding.UTF8.GetString(usernameBuffer);
-            Console.WriteLine($"{GetTimeStamp()} Identified username from {clientSignature}: '{username}' ({usernameLength} bytes)");
+
+            string serializedPacket = Encoding.UTF8.GetString(packetBuffer);
+            Packet packet = JsonSerializer.Deserialize<Packet>(serializedPacket);
+            string clientUsername = packet.Payload;
+            Console.WriteLine($"{GetTimeStamp()} Identified username from {clientSignature}: '{clientUsername}' ({packetLength} bytes)");
 
             // Create a new discriminator and send it to the client
             string discriminator = CreateNewDiscriminator();
-            SendMessageToClient(clientSocket, Encoding.UTF8.GetBytes("<|DSCRM|>" + discriminator));
-            Console.WriteLine($"{GetTimeStamp()} Sent new discriminator to {clientSignature}, Username:{username}, DSCRM:{discriminator}");
-            clientUsernames[clientSignature] = $"{username}#{discriminator}";
+            SendMessageToClient(clientSocket, new Packet(PacketType.DISCRIMINATOR, discriminator));
+            Console.WriteLine($"{GetTimeStamp()} Sent new discriminator to {clientSignature}, Username:{clientUsername}, DSCRM:{discriminator}");
+            clientUsernames[clientSignature] = $"{clientUsername}#{discriminator}";
 
             // Send channel list to new user
-            string jsonChannelList = JsonSerializer.Serialize(channels);
-            SendMessageToClient(clientSocket, Encoding.UTF8.GetBytes("<|CHLST|>" + jsonChannelList));
-            Console.WriteLine($"{GetTimeStamp()} Sent channel list to {clientSignature}, Username:{username}#{discriminator}");
+            SendMessageToClient(clientSocket, new Packet(PacketType.CHANNEL_LIST, JsonSerializer.Serialize(channels)));
+            Console.WriteLine($"{GetTimeStamp()} Sent channel list to {clientSignature}, Username:{clientUsername}#{discriminator}");
             clientChannels[clientSocket] = 0;
 
             // Send online user list to new user
-            string jsonUserList = JsonSerializer.Serialize(clientUsernames.Values);
-            SendMessageToClient(clientSocket, Encoding.UTF8.GetBytes("<|USRLST|>" + jsonUserList));
-            Console.WriteLine($"{GetTimeStamp()} Sent user list to {clientSignature}, Username:{username}#{discriminator}");
+            SendMessageToClient(clientSocket, new Packet(PacketType.USER_LIST, JsonSerializer.Serialize(clientUsernames.Values)));
+            Console.WriteLine($"{GetTimeStamp()} Sent user list to {clientSignature}, Username:{clientUsername}#{discriminator}");
 
             // Update all clients about new user
-            BroadcastMessageToAllClients(Encoding.UTF8.GetBytes($"<|NEWUSR|>{username}#{discriminator}"), -1, clients, clientSocket);
-            Console.WriteLine($"{GetTimeStamp()} Updated all clients about {clientSignature}, Username:{username}#{discriminator}");
+            BroadcastMessageToAllClients(new Packet(PacketType.USER_CONNECTED, $"{clientUsername}#{discriminator}"), clients, clientSocket);
+            Console.WriteLine($"{GetTimeStamp()} Updated all clients about {clientSignature}, Username:{clientUsername}#{discriminator}");
 
             // Listen for actual messages from the client
             while (true)
@@ -119,24 +160,20 @@ namespace Chat_App_Server
                         totalReceived += currentReceived;
                     }
 
-                    var clientMessage = Encoding.UTF8.GetString(messageBuffer, 0, totalReceived);
-                    if (clientMessage.StartsWith("<|CHCHGE|>"))
+                    string serializedJson = Encoding.UTF8.GetString(messageBuffer, 0, totalReceived);
+                    Packet receivedPacket = JsonSerializer.Deserialize<Packet>(serializedJson);
+                    if (receivedPacket.Type == PacketType.CHANNEL_CHANGE)
                     {
-                        int newClientChannel = int.Parse(clientMessage.Replace("<|CHCHGE|>", ""));
+                        int newClientChannel = receivedPacket.Channel;
                         int oldChannel = clientChannels[clientSocket];
                         clientChannels[clientSocket] = newClientChannel;
                         Console.WriteLine($"{GetTimeStamp()} Channel change: {clientSignature}, Username:{clientUsernames[clientSignature]} from {oldChannel} to {newClientChannel}");
                         continue;
                     }
 
-                    // Remove channel from message
-                    int clientChannel = BitConverter.ToInt32(messageBuffer, 0);
-                    var messageWithoutChannel = new byte[messageLength - 4];
-                    Array.Copy(messageBuffer, 4, messageWithoutChannel, 0, messageLength - 4);
-
-                    Console.WriteLine($"{GetTimeStamp()} Received message from {clientSignature}, Username:{clientUsernames[clientSignature]} ({messageLength} bytes, Channel:{clientChannel})");
-                    BroadcastMessageToAllClients(messageWithoutChannel, clientChannel, clients, null);
-                    Console.WriteLine($"{GetTimeStamp()} Sent message from {clientSignature}, Username:{clientUsernames[clientSignature]} ({messageLength} bytes, Channel:{clientChannel}) to all clients");
+                    Console.WriteLine($"{GetTimeStamp()} Received message from {clientSignature}, Username:{clientUsernames[clientSignature]} ({messageLength} bytes, Channel:{receivedPacket.Channel})");
+                    BroadcastMessageToAllClients(receivedPacket, clients, null);
+                    Console.WriteLine($"{GetTimeStamp()} Sent message from {clientSignature}, Username:{clientUsernames[clientSignature]} ({messageLength} bytes, Channel:{receivedPacket.Channel}) to all clients");
                 }
                 catch (SocketException)
                 {
@@ -158,7 +195,7 @@ namespace Chat_App_Server
             // Update connected clients about disconnection
             string clientUsername = clientUsernames[clientSignature];
             Console.WriteLine($"{GetTimeStamp()} Client disconnected: {clientSignature}, Username:{clientUsername}");
-            BroadcastMessageToAllClients(Encoding.UTF8.GetBytes($"<|USRDC|>{clientUsername}"), -1, clients, clientSocket);
+            BroadcastMessageToAllClients(new Packet(PacketType.USER_DISCONNECTED, clientUsername), clients, clientSocket);
             Console.WriteLine($"{GetTimeStamp()} Updated all clients about disconnection by: {clientSignature}, Username:{clientUsername}");
 
             // Cleanup dead client data
@@ -171,19 +208,19 @@ namespace Chat_App_Server
         /// <summary>
         /// Take the message and broadcast it to all the clients. If 'excludedSender' is not null, every client except 'excludedSender' will be sent the message.
         /// </summary>
-        /// <param name="messageBuffer">The message</param>
+        /// <param name="packet"></param>
         /// <param name="clients"></param>
-        /// <param name="excludedSender">Socket to exclude from being sent a message</param>
-        static void BroadcastMessageToAllClients(byte[] messageBuffer, int channel, ConcurrentBag<Socket> clients, Socket excludedSender)
+        /// <param name="excludedSender"></param>
+        static void BroadcastMessageToAllClients(Packet packet, ConcurrentBag<Socket> clients, Socket excludedSender)
         {
             foreach (var client in clients)
             {
-                // if sender is excluded
+                // If sender is excluded
                 if (excludedSender != null && client == excludedSender) continue;
-                // if client is not on specified channel
-                if (channel != -1 && !(clientChannels[client] == channel)) continue;
-                // send message
-                SendMessageToClient(client, messageBuffer);
+                // If client is not on specified channel
+                if (packet.Channel != -1 && !(clientChannels[client] == packet.Channel)) continue;
+                // Send message
+                SendMessageToClient(client, packet);
             }
         }
 
@@ -191,18 +228,19 @@ namespace Chat_App_Server
         /// Send message to individual client, prepending it with the length of the message
         /// </summary>
         /// <param name="client"></param>
-        /// <param name="messageBuffer"></param>
-        static void SendMessageToClient(Socket client, byte[] messageBuffer)
+        /// <param name="packet"></param>
+        static void SendMessageToClient(Socket client, Packet packet)
         {
             try
             {
-                var messageBufferLengthBytes = BitConverter.GetBytes(messageBuffer.Length);
-                // Prepend the message with the length bytes
-                byte[] finalMessage = new byte[messageBufferLengthBytes.Length + messageBuffer.Length];
-                Array.Copy(messageBufferLengthBytes, 0, finalMessage, 0, messageBufferLengthBytes.Length);
-                Array.Copy(messageBuffer, 0, finalMessage, messageBufferLengthBytes.Length, messageBuffer.Length);
+                string packetJson = JsonSerializer.Serialize(packet);
+                var packetBytes = Encoding.UTF8.GetBytes(packetJson);
+                var packetLengthBytes = BitConverter.GetBytes(packetBytes.Length);
+                List<byte> finalBytes = new();
+                finalBytes.AddRange(packetLengthBytes); // Prepend the message with the length bytes
+                finalBytes.AddRange(packetBytes);
                 // Send the message
-                client.Send(finalMessage);
+                client.Send(finalBytes.ToArray());
             }
             catch (SocketException)
             {
