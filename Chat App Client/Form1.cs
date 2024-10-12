@@ -324,7 +324,20 @@ namespace Chat_App_Client
             Console.WriteLine($"Attempting to connect to [{ipEndPoint.Address}, {ipEndPoint.Port}]...");
             connectToServerButton.Enabled = false;
             connectToServerButton.Text = "Connecting...";
-            await client.ConnectAsync(ipEndPoint);
+            try
+            {
+                await client.ConnectAsync(ipEndPoint);
+            } catch (Exception ex)
+            {
+                Console.WriteLine("Failed to connect to server");
+                Console.WriteLine(ex.ToString());
+                connectToServerButton.Text = "Connect to server";
+                connectToServerButton.Enabled = true;
+                client.Close();
+                client = null;
+                MessageBox.Show("Failed to connect to server", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
             Console.WriteLine($"Connected to [{ipEndPoint.Address}, {ipEndPoint.Port}]");
 
             // Send username to server

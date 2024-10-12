@@ -21,7 +21,7 @@ namespace Chat_App_Server
         static async Task Main(string[] args)
         {
             int port = 11000;
-            if (args.Length > 1) port = int.Parse(args[1]);
+            if (args.Length > 0) port = int.Parse(args[0]);
             IPHostEntry localhost = await Dns.GetHostEntryAsync("localhost");
             IPAddress localIpAddress = localhost.AddressList[0];
             IPEndPoint ipEndPoint = new(localIpAddress, port);

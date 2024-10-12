@@ -6,14 +6,13 @@ namespace Chat_App_Client
         ///  The main entry point for the application.
         /// </summary>
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
-            string[] args = Environment.GetCommandLineArgs();
             string username;
             ApplicationConfiguration.Initialize();
-            if (args.Length > 1)
+            if (args.Length > 0)
             {
-                username = args[1];
+                username = args[0];
             } else
             {
                 username = UsernameInputBox();
